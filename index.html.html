@@ -1,0 +1,3350 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark" data-tema="escuro">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulador de Curva de Carga — Diária e Anual (8.760 h)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/firebase@10.14.1/firebase-app-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/firebase@10.14.1/firebase-database-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/firebase@10.14.1/firebase-auth-compat.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: { extend: { colors: { brand: { 50:'#f0f9ff', 500:'#0284c7', 600:'#0369a1', 900:'#0c4a6e' } } } }
+        }
+    </script>
+    <style>
+        :root {
+            --fundo:#0f172a; --superficie:#1e293b; --superficie-2:#0f172a;
+            --superficie-3:#334155; --superficie-4:#475569; --hover:rgba(51,65,85,.4);
+            --borda:#334155; --borda-2:#475569;
+            --txt:#ffffff; --txt-1:#e2e8f0; --txt-2:#94a3b8; --txt-3:#64748b;
+            --sky:#38bdf8; --indigo:#818cf8; --amber:#fbbf24; --emerald:#34d399; --rose:#fb7185;
+            --sombra:0 10px 25px -8px rgba(0,0,0,.55);
+        }
+        :root[data-tema="claro"] {
+            --fundo:#eef2f7; --superficie:#ffffff; --superficie-2:#f1f5f9;
+            --superficie-3:#e2e8f0; --superficie-4:#cbd5e1; --hover:rgba(148,163,184,.22);
+            --borda:#dde4ec; --borda-2:#cbd5e1;
+            --txt:#0f172a; --txt-1:#1e293b; --txt-2:#57677e; --txt-3:#7b8aa0;
+            --sky:#0284c7; --indigo:#4f46e5; --amber:#b45309; --emerald:#047857; --rose:#be123c;
+            --sombra:0 8px 20px -10px rgba(15,23,42,.22);
+        }
+        body { background-color:var(--fundo); color:var(--txt-1); transition:background-color .2s ease, color .2s ease; }
+
+        .bg-slate-900 { background-color:var(--fundo) !important; }
+        .bg-slate-800 { background-color:var(--superficie) !important; }
+        .bg-slate-700 { background-color:var(--superficie-3) !important; }
+        .hover\:bg-slate-600:hover { background-color:var(--superficie-4) !important; }
+        .hover\:bg-slate-700\/30:hover, .hover\:bg-slate-700\/40:hover { background-color:var(--hover) !important; }
+        .border-slate-700, .border-slate-700\/60 { border-color:var(--borda) !important; }
+        .border-slate-600 { border-color:var(--borda-2) !important; }
+        .divide-slate-700\/50 > :not([hidden]) ~ :not([hidden]) { border-color:var(--borda) !important; }
+        .text-white { color:var(--txt) !important; }
+        .text-slate-100, .text-slate-200, .text-slate-300, .hover\:text-slate-200:hover { color:var(--txt-1) !important; }
+        .text-slate-400 { color:var(--txt-2) !important; }
+        .text-slate-500, .text-slate-600 { color:var(--txt-3) !important; }
+        .text-sky-400, .text-sky-300 { color:var(--sky) !important; }
+        .text-indigo-400 { color:var(--indigo) !important; }
+        .text-amber-400, .text-amber-500\/80 { color:var(--amber) !important; }
+        .text-emerald-400 { color:var(--emerald) !important; }
+        .text-rose-400, .text-rose-300, .hover\:text-rose-300:hover { color:var(--rose) !important; }
+        .txt-branco { color:#fff !important; }
+        .btn-preset { transition:background-color .15s ease, border-color .15s ease, color .15s ease; }
+        .preset-ativo, .preset-ativo:hover { background:#0284c7 !important; border-color:#0284c7 !important; color:#fff !important; font-weight:600; }
+        .shadow-xl, .shadow-lg { box-shadow:var(--sombra) !important; }
+
+        .inp { background:var(--superficie-2); border:1px solid var(--borda); border-radius:.5rem; padding:.25rem .45rem; color:var(--txt-1); font-size:.72rem; width:100%; }
+        .inp:focus { outline:none; border-color:var(--sky); box-shadow:0 0 0 2px color-mix(in srgb, var(--sky) 35%, transparent); }
+        .inp:disabled { opacity:.4; cursor:not-allowed; }
+        .inp-mes { text-align:center; }
+        table.tbl td { padding:.35rem .4rem; }
+        .aba-ativa { background:#0284c7; color:#fff; border:1px solid #0284c7; }
+        .aba-inativa { background:var(--superficie); color:var(--txt-2); border:1px solid var(--borda); }
+        .linha-pausada { opacity:.42; }
+        .modal-fundo { background:rgba(2,6,23,.65); backdrop-filter:blur(2px); }
+        canvas { max-width:100%; }
+        button:focus-visible, select:focus-visible, input:focus-visible { outline:2px solid var(--sky); outline-offset:2px; }
+        @media (prefers-reduced-motion: reduce) { * { animation:none !important; transition:none !important; } }
+    </style>
+    <script>
+        // Aplica o tema antes da primeira pintura, para não piscar escuro em quem usa tema claro
+        (function () {
+            try {
+                var claro = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
+                document.documentElement.dataset.tema = claro ? 'claro' : 'escuro';
+                document.documentElement.classList.toggle('dark', !claro);
+            } catch (e) {}
+        })();
+    </script>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen p-4 md:p-6 font-sans">
+
+<div class="max-w-7xl mx-auto space-y-6">
+
+    <!-- CABEÇALHO -->
+    <header class="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl">
+        <div>
+            <h1 class="text-2xl md:text-3xl font-bold text-white flex items-center gap-3">
+                <i class="fa-solid fa-bolt text-amber-400"></i>
+                Simulador de Curva de Carga
+            </h1>
+            <p class="text-slate-400 text-sm mt-1">Dia típico determinístico e estocástico (Monte Carlo) + série anual de 8.760 horas</p>
+            <p id="cabecalho-cliente" class="hidden text-sm font-semibold text-sky-400 mt-2"></p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+            <button id="btn-tema" onclick="alternarTema()" class="bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-2 rounded-xl text-xs font-medium transition flex items-center gap-2 border border-slate-600" title="Alternar entre tema claro e escuro">
+                <i class="fa-solid fa-sun"></i> Tema claro
+            </button>
+            <button onclick="exportarConfig()" class="bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-2 rounded-xl text-xs font-medium transition flex items-center gap-2 border border-slate-600">
+                <i class="fa-solid fa-file-arrow-down"></i> Salvar configuração
+            </button>
+            <label class="bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-2 rounded-xl text-xs font-medium transition flex items-center gap-2 border border-slate-600 cursor-pointer">
+                <i class="fa-solid fa-file-arrow-up"></i> Abrir configuração
+                <input type="file" accept=".json" class="hidden" onchange="importarConfig(event)">
+            </label>
+            <button onclick="restaurarPadrao()" class="bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-2 rounded-xl text-xs font-medium transition flex items-center gap-2 border border-slate-600">
+                <i class="fa-solid fa-rotate-left"></i> Restaurar padrão
+            </button>
+        </div>
+    </header>
+
+    <!-- DADOS DO CLIENTE -->
+    <div class="bg-slate-800 rounded-2xl border border-slate-700 shadow-xl overflow-hidden">
+        <button onclick="alternarPainel('painel-cliente')" class="w-full flex items-center justify-between gap-4 p-5 hover:bg-slate-700/40 transition text-left">
+            <h2 class="text-base font-bold text-white flex items-center gap-2 shrink-0">
+                <i class="fa-solid fa-address-card text-sky-400"></i> Dados do cliente
+            </h2>
+            <span id="resumo-cliente" class="text-xs text-slate-500 truncate flex-1 text-right">Nenhum dado preenchido</span>
+            <i id="icone-painel-cliente" class="fa-solid fa-chevron-down text-slate-400 shrink-0"></i>
+        </button>
+
+        <div id="painel-cliente" class="hidden px-5 pb-5 border-t border-slate-700/60 pt-5">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="md:col-span-2">
+                    <label for="cli-nome" class="block text-xs font-semibold text-slate-400 mb-1">Cliente ou razão social</label>
+                    <input type="text" id="cli-nome" onchange="atualizarCliente()" placeholder="Nome que vai no estudo" class="inp !text-sm !py-2">
+                </div>
+                <div class="">
+                    <label for="cli-uc" class="block text-xs font-semibold text-slate-400 mb-1">Unidade consumidora</label>
+                    <input type="text" id="cli-uc" onchange="atualizarCliente()" placeholder="Nº da UC" class="inp !text-sm !py-2">
+                </div>
+                <div class="md:col-span-2">
+                    <label for="cli-endereco" class="block text-xs font-semibold text-slate-400 mb-1">Endereço</label>
+                    <input type="text" id="cli-endereco" onchange="atualizarCliente()" placeholder="" class="inp !text-sm !py-2">
+                </div>
+                <div class="">
+                    <label for="cli-cidade" class="block text-xs font-semibold text-slate-400 mb-1">Cidade e UF</label>
+                    <input type="text" id="cli-cidade" onchange="atualizarCliente()" placeholder="Recife, PE" class="inp !text-sm !py-2">
+                </div>
+                <div class="">
+                    <label for="cli-concessionaria" class="block text-xs font-semibold text-slate-400 mb-1">Concessionária</label>
+                    <input type="text" id="cli-concessionaria" onchange="atualizarCliente()" placeholder="Neoenergia Pernambuco" class="inp !text-sm !py-2">
+                </div>
+                <div>
+                    <label for="cli-classe" class="block text-xs font-semibold text-slate-400 mb-1">Classe tarifária</label>
+                    <select id="cli-classe" onchange="aoMudarClasse()" class="inp !text-sm !py-2">
+                        <option>Não informado</option>
+                        <option>B1 Residencial</option>
+                        <option>B1 Residencial baixa renda</option>
+                        <option>B2 Rural</option>
+                        <option>B3 Demais classes</option>
+                        <option>B4 Iluminação pública</option>
+                        <option>A4 Convencional</option>
+                        <option>A4 Horossazonal verde</option>
+                        <option>A4 Horossazonal azul</option>
+                        <option>A3 Horossazonal</option>
+                        <option>A2 Horossazonal</option>
+                    </select>
+                </div>
+                <div class="">
+                    <label for="cli-responsavel" class="block text-xs font-semibold text-slate-400 mb-1">Responsável técnico</label>
+                    <input type="text" id="cli-responsavel" onchange="atualizarCliente()" placeholder="Nome e registro" class="inp !text-sm !py-2">
+                </div>
+                <div class="">
+                    <label for="cli-data" class="block text-xs font-semibold text-slate-400 mb-1">Data do estudo</label>
+                    <input type="date" id="cli-data" onchange="atualizarCliente()" placeholder="" class="inp !text-sm !py-2">
+                </div>
+                <div class="md:col-span-2">
+                    <label for="cli-obs" class="block text-xs font-semibold text-slate-400 mb-1">Observações</label>
+                    <input type="text" id="cli-obs" onchange="atualizarCliente()" placeholder="Escopo, premissas, origem dos dados" class="inp !text-sm !py-2">
+                </div>
+            </div>
+
+            <div class="mt-5 pt-5 border-t border-slate-700/60">
+                <h3 class="text-sm font-bold text-white flex items-center gap-2 mb-3">
+                    <i class="fa-solid fa-location-dot text-sky-400"></i> Tipo de uso e localização
+                </h3>
+                <div class="grid grid-cols-2 md:grid-cols-6 gap-4">
+                    <div class="col-span-2 md:col-span-3">
+                        <label for="cli-ramo" class="block text-xs font-semibold text-slate-400 mb-1">Ramo de atividade</label>
+                        <select id="cli-ramo" onchange="aoMudarRamo()" class="inp !text-sm !py-2"></select>
+                    </div>
+                    <div class="col-span-2 md:col-span-3">
+                        <label for="cli-local" class="block text-xs font-semibold text-slate-400 mb-1">Localidade de referência</label>
+                        <select id="cli-local" onchange="aoMudarLocal()" class="inp !text-sm !py-2"></select>
+                    </div>
+                    <div class="md:col-span-2">
+                        <label for="cli-lat" class="block text-xs font-semibold text-slate-400 mb-1">Latitude</label>
+                        <input type="number" id="cli-lat" step="0.01" onchange="aoMudarCoordenada()" placeholder="-8.05" class="inp !text-sm !py-2">
+                    </div>
+                    <div class="md:col-span-2">
+                        <label for="cli-lon" class="block text-xs font-semibold text-slate-400 mb-1">Longitude</label>
+                        <input type="number" id="cli-lon" step="0.01" onchange="aoMudarCoordenada()" placeholder="-34.90" class="inp !text-sm !py-2">
+                    </div>
+                    <div class="md:col-span-2">
+                        <label for="cli-alt" class="block text-xs font-semibold text-slate-400 mb-1">Altitude (m)</label>
+                        <input type="number" id="cli-alt" step="1" onchange="aoMudarCoordenada()" placeholder="4" class="inp !text-sm !py-2">
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-2 mt-3">
+                    <p id="resumo-perfil" class="text-[11px] text-slate-500"></p>
+                    <p id="resumo-clima" class="text-[11px] text-slate-500"></p>
+                </div>
+            </div>
+            <p class="text-[11px] text-slate-500 mt-3">Esses dados acompanham o arquivo de configuração e entram no cabeçalho dos CSV exportados.</p>
+        </div>
+    </div>
+
+    <!-- MEDIÇÃO DA CONTA -->
+    <div class="bg-slate-800 rounded-2xl border border-slate-700 shadow-xl overflow-hidden">
+        <button onclick="alternarPainel('painel-medicao')" class="w-full flex items-center justify-between gap-4 p-5 hover:bg-slate-700/40 transition text-left">
+            <h2 class="text-base font-bold text-white flex items-center gap-2 shrink-0">
+                <i class="fa-solid fa-file-invoice text-sky-400"></i> Medição da conta de energia
+            </h2>
+            <span id="resumo-medicao" class="text-xs text-slate-500 truncate flex-1 text-right">Nenhum mês informado</span>
+            <i id="icone-painel-medicao" class="fa-solid fa-chevron-down text-slate-400 shrink-0"></i>
+        </button>
+
+        <div id="painel-medicao" class="hidden px-5 pb-5 border-t border-slate-700/60 pt-5 space-y-5">
+
+            <div class="grid grid-cols-2 md:grid-cols-6 gap-3 items-end">
+                <div>
+                    <label for="med-mes-ini" class="block text-xs font-semibold text-slate-400 mb-1">Mês inicial</label>
+                    <select id="med-mes-ini" class="inp !text-sm !py-2"></select>
+                </div>
+                <div>
+                    <label for="med-ano-ini" class="block text-xs font-semibold text-slate-400 mb-1">Ano inicial</label>
+                    <input type="number" id="med-ano-ini" min="2000" max="2100" class="inp !text-sm !py-2">
+                </div>
+                <div>
+                    <label for="med-mes-fim" class="block text-xs font-semibold text-slate-400 mb-1">Mês final</label>
+                    <select id="med-mes-fim" class="inp !text-sm !py-2"></select>
+                </div>
+                <div>
+                    <label for="med-ano-fim" class="block text-xs font-semibold text-slate-400 mb-1">Ano final</label>
+                    <input type="number" id="med-ano-fim" min="2000" max="2100" class="inp !text-sm !py-2">
+                </div>
+                <div>
+                    <label for="med-dia-leitura" class="block text-xs font-semibold text-slate-400 mb-1">Dia de leitura</label>
+                    <input type="number" id="med-dia-leitura" min="1" max="31" placeholder="13" class="inp !text-sm !py-2">
+                </div>
+                <div>
+                    <button type="button" onclick="gerarPeriodos()" class="w-full bg-sky-600 hover:bg-sky-500 text-white txt-branco px-3 py-2 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-calendar-plus"></i> Gerar ciclos
+                    </button>
+                </div>
+            </div>
+            <p class="text-[11px] text-slate-500 -mt-2">O período pode atravessar o ano, como Jul/25 a Jun/26. O dia de leitura preenche os ciclos automaticamente; deixe em branco para usar o mês cheio. Depois é só corrigir as datas que estiverem diferentes na conta.</p>
+
+            <div>
+                <label for="med-colar" class="block text-xs font-semibold text-slate-400 mb-1">Colar o histórico impresso na conta</label>
+                <textarea id="med-colar" rows="2" class="inp !text-sm !py-2" placeholder="JAN/25 = 2368, FEV/25 = 2208, MAR/25 = 2102..."></textarea>
+                <div class="flex flex-wrap gap-2 mt-2">
+                    <button type="button" onclick="lerMedicaoColada()" class="text-[11px] bg-sky-600 hover:bg-sky-500 txt-branco px-3 py-1.5 rounded-lg font-medium">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i> Ler energia
+                    </button>
+                    <button type="button" onclick="limparMedicao()" class="text-[11px] bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg border border-slate-600">Limpar energia</button>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs text-slate-300 tbl min-w-[620px]">
+                    <thead class="bg-slate-900 text-slate-400 font-semibold tracking-wide">
+                        <tr>
+                            <th class="p-2.5 w-20">Ciclo</th>
+                            <th class="p-2.5">Leitura anterior</th>
+                            <th class="p-2.5">Leitura atual</th>
+                            <th class="p-2.5 w-20">Nº de dias</th>
+                            <th class="p-2.5">Energia (kWh)</th>
+                            <th class="p-2.5 w-24">kWh/dia</th>
+                        </tr>
+                    </thead>
+                    <tbody id="corpo-medicao" class="divide-y divide-slate-700/50"></tbody>
+                </table>
+            </div>
+            <p class="text-[11px] text-slate-500">Mudar as datas recalcula os dias; mudar os dias recua a leitura anterior. Deixe a energia em branco nos ciclos sem leitura. O modelo é somado dia a dia dentro de cada ciclo, respeitando o mês e o tipo de dia reais de cada data.</p>
+        </div>
+    </div>
+
+    <!-- ESTUDOS NA NUVEM -->
+    <div class="bg-slate-800 rounded-2xl border border-slate-700 shadow-xl overflow-hidden">
+        <button onclick="alternarPainel('painel-nuvem')" class="w-full flex items-center justify-between gap-4 p-5 hover:bg-slate-700/40 transition text-left">
+            <h2 class="text-base font-bold text-white flex items-center gap-2 shrink-0">
+                <i class="fa-solid fa-cloud text-sky-400"></i> Estudos na nuvem
+            </h2>
+            <span id="resumo-nuvem" class="text-xs text-slate-500 truncate flex-1 text-right">Conectando…</span>
+            <i id="icone-painel-nuvem" class="fa-solid fa-chevron-down text-slate-400 shrink-0"></i>
+        </button>
+
+        <div id="painel-nuvem" class="hidden px-5 pb-5 border-t border-slate-700/60 pt-5 space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+                <div class="md:col-span-2">
+                    <label for="nuvem-nome" class="block text-xs font-semibold text-slate-400 mb-1">Nome do estudo</label>
+                    <input type="text" id="nuvem-nome" placeholder="Deixe em branco para usar o nome do cliente" class="inp !text-sm !py-2">
+                </div>
+                <div class="flex gap-2">
+                    <button type="button" onclick="salvarNaNuvem()" id="btn-nuvem-salvar" disabled class="flex-1 bg-sky-600 hover:bg-sky-500 disabled:opacity-40 disabled:cursor-not-allowed text-white txt-branco px-3 py-2 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-file-arrow-up"></i> Salvar
+                    </button>
+                    <button type="button" onclick="listarNuvem()" id="btn-nuvem-listar" disabled class="bg-slate-700 hover:bg-slate-600 disabled:opacity-40 disabled:cursor-not-allowed text-slate-200 px-3 py-2 rounded-xl text-xs font-medium transition border border-slate-600" title="Atualizar a lista">
+                        <i class="fa-solid fa-rotate"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div id="lista-nuvem"></div>
+
+            <p class="text-[11px] text-slate-500">
+                Salva o estudo inteiro — cliente, localização, equipamentos, sazonalidade e medição — no Realtime Database do projeto
+                <span class="text-slate-400">curvadecarga-5a5f2</span>. Salvar de novo com o mesmo nome substitui o estudo anterior.
+                Sem autenticação, quem tiver o endereço do banco lê e escreve esses dados: restrinja o nó <span class="text-slate-400">estudos</span>
+                nas regras do Realtime Database antes de guardar informação de cliente.
+            </p>
+        </div>
+    </div>
+
+    <!-- CONFIGURAÇÃO GLOBAL -->
+    <div class="bg-slate-800 rounded-2xl border border-slate-700 shadow-xl overflow-hidden">
+        <button onclick="alternarPainel('painel-config')" class="w-full flex items-center justify-between p-5 hover:bg-slate-700/40 transition">
+            <h2 class="text-base font-bold text-white flex items-center gap-2">
+                <i class="fa-solid fa-sliders text-sky-400"></i> Calendário e sazonalidade
+            </h2>
+            <i id="icone-painel-config" class="fa-solid fa-chevron-up text-slate-400"></i>
+        </button>
+
+        <div id="painel-config" class="px-5 pb-5 space-y-5 border-t border-slate-700/60 pt-5">
+
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-1">Ano da simulação</label>
+                    <input type="number" id="cfg-ano" value="2026" min="2000" max="2100" onchange="aoMudarAno()" class="inp">
+                    <p id="info-ano" class="text-[11px] text-slate-500 mt-1">365 dias · 8.760 horas</p>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-1">Simulações do dia típico</label>
+                    <input type="number" id="cfg-nsim" value="1500" min="100" max="10000" step="100" onchange="atualizarDiario()" class="inp">
+                    <p class="text-[11px] text-slate-500 mt-1">Amostras Monte Carlo</p>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-1">Repetições por dia do ano</label>
+                    <input type="number" id="cfg-nrep" value="25" min="1" max="200" onchange="invalidarAnual()" class="inp">
+                    <p class="text-[11px] text-slate-500 mt-1">Define a faixa P5–P95 diária</p>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-1">Atraso de início no fim de semana</label>
+                    <input type="number" id="cfg-desloc" value="1" step="0.5" min="-4" max="4" onchange="atualizarDiario()" class="inp">
+                    <p class="text-[11px] text-slate-500 mt-1">Horas a mais no sábado e domingo</p>
+                </div>
+            </div>
+
+            <div>
+                <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+                    <label class="text-xs font-semibold text-slate-400">Índice climático mensal — quanto mais alto, mais calor e mais refrigeração</label>
+                    <div class="flex flex-wrap gap-2 items-center">
+                        <button type="button" data-preset="local" aria-pressed="false" onclick="aplicarPreset('local')" class="btn-preset text-[11px] bg-slate-700 hover:bg-slate-600 px-2.5 py-1 rounded-lg border border-slate-600" title="Calcula os doze fatores a partir da latitude, longitude e altitude informadas">Do local</button>
+                        <span class="w-px self-stretch bg-slate-600 mx-0.5"></span>
+                        <button type="button" data-preset="norte" aria-pressed="false" onclick="aplicarPreset('norte')" class="btn-preset text-[11px] bg-slate-700 hover:bg-slate-600 px-2.5 py-1 rounded-lg border border-slate-600">Norte</button>
+                        <button type="button" data-preset="nordeste" aria-pressed="false" onclick="aplicarPreset('nordeste')" class="btn-preset text-[11px] bg-slate-700 hover:bg-slate-600 px-2.5 py-1 rounded-lg border border-slate-600">Nordeste</button>
+                        <button type="button" data-preset="centrooeste" aria-pressed="false" onclick="aplicarPreset('centrooeste')" class="btn-preset text-[11px] bg-slate-700 hover:bg-slate-600 px-2.5 py-1 rounded-lg border border-slate-600">Centro-Oeste</button>
+                        <button type="button" data-preset="sudeste" aria-pressed="false" onclick="aplicarPreset('sudeste')" class="btn-preset text-[11px] bg-slate-700 hover:bg-slate-600 px-2.5 py-1 rounded-lg border border-slate-600">Sudeste</button>
+                        <button type="button" data-preset="sul" aria-pressed="false" onclick="aplicarPreset('sul')" class="btn-preset text-[11px] bg-slate-700 hover:bg-slate-600 px-2.5 py-1 rounded-lg border border-slate-600">Sul</button>
+                        <button type="button" data-preset="uniforme" aria-pressed="false" onclick="aplicarPreset('uniforme')" class="btn-preset text-[11px] bg-slate-700 hover:bg-slate-600 px-2.5 py-1 rounded-lg border border-slate-600">Sem sazonalidade</button>
+                        <span class="w-px self-stretch bg-slate-600 mx-0.5"></span>
+                        <button type="button" id="btn-normalizar" aria-pressed="false" onclick="normalizarFatores()" class="btn-preset text-[11px] bg-slate-700 hover:bg-slate-600 px-2.5 py-1 rounded-lg border border-slate-600">Normalizar média 1,00</button>
+                    </div>
+                </div>
+                <div id="grade-meses" class="grid grid-cols-6 md:grid-cols-12 gap-1.5"></div>
+                <p class="text-[11px] text-slate-500 mt-2">Os perfis regionais já vêm com média 1,00, então trocar de região muda o formato da sazonalidade sem mexer no total do ano. Cada equipamento reage a esse índice conforme a sua sensibilidade sazonal: ar-condicionado sobe no verão, chuveiro sobe no inverno.</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+                <div class="md:col-span-1">
+                    <label class="flex items-center gap-2 text-xs font-semibold text-slate-300 mb-2">
+                        <input type="checkbox" id="cfg-feriados" checked onchange="invalidarAnual()" class="accent-sky-500 w-4 h-4">
+                        Tratar feriados como domingo
+                    </label>
+                    <p class="text-[11px] text-slate-500">Desmarque para o ano ter apenas dias úteis, sábados e domingos.</p>
+                </div>
+                <div class="md:col-span-2">
+                    <div class="flex items-center justify-between gap-2 mb-1">
+                        <label for="cfg-feriados-reg" class="text-xs font-semibold text-slate-400">Feriados</label>
+                        <button type="button" onclick="restaurarFeriados()" class="text-[11px] text-sky-400 hover:text-sky-300 transition">Restaurar lista</button>
+                    </div>
+                    <input type="text" id="cfg-feriados-reg" onchange="invalidarAnual()" class="inp" placeholder="01/01, 25/12">
+                    <p id="info-moveis" class="text-[11px] text-slate-500 mt-1"></p>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- CADASTRO + TABELA -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl space-y-4">
+            <h2 class="text-lg font-bold text-white flex items-center gap-2">
+                <i class="fa-solid fa-plus-circle text-sky-400"></i> Adicionar equipamento
+            </h2>
+
+            <form id="form-equipamento" onsubmit="adicionarEquipamento(event)" class="space-y-3">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-1">Nome</label>
+                    <input type="text" id="eq-nome" required placeholder="Micro-ondas" class="inp !text-sm !py-2">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 mb-1">Potência (kW)</label>
+                        <input type="number" id="eq-potencia" required min="0.001" step="any" value="1" class="inp !text-sm !py-2">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 mb-1">Quantidade</label>
+                        <input type="number" id="eq-qtd" required min="1" value="1" class="inp !text-sm !py-2">
+                    </div>
+                </div>
+                <div>
+                    <div class="flex items-center justify-between gap-2 mb-1.5">
+                        <label class="text-xs font-semibold text-slate-400">Intervalos de uso</label>
+                        <button type="button" onclick="adicionarJanela('novo')" class="text-[11px] text-sky-400 hover:text-sky-300 font-medium transition">
+                            <i class="fa-solid fa-plus"></i> intervalo
+                        </button>
+                    </div>
+                    <div id="janelas-novo" class="space-y-2"></div>
+                    <p id="total-janelas-novo" class="text-[11px] text-slate-500 mt-1.5"></p>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 mb-1">Probabilidade de uso</label>
+                        <input type="number" id="eq-prob" required step="0.05" min="0.01" max="1" value="0.8" class="inp !text-sm !py-2">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 mb-1">Sensibilidade sazonal</label>
+                        <input type="number" id="eq-sens" step="0.1" min="-2" max="3" value="0" class="inp !text-sm !py-2">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 mb-1">Fator sábado</label>
+                        <input type="number" id="eq-sab" step="0.05" min="0" max="3" value="1" class="inp !text-sm !py-2">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 mb-1">Fator domingo</label>
+                        <input type="number" id="eq-dom" step="0.05" min="0" max="3" value="1" class="inp !text-sm !py-2">
+                    </div>
+                </div>
+                <label class="flex items-center gap-2 text-xs text-slate-300">
+                    <input type="checkbox" id="eq-continuo" class="accent-sky-500 w-4 h-4">
+                    Carga cíclica de 24 h (geladeira, freezer, bomba)
+                </label>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-1">Fator de ciclo, se cíclica</label>
+                    <input type="number" id="eq-duty" step="0.05" min="0.01" max="1" value="0.4" class="inp !text-sm !py-2">
+                </div>
+
+                <button type="submit" class="w-full bg-sky-600 hover:bg-sky-500 text-white txt-branco font-semibold py-2.5 rounded-xl transition shadow-lg shadow-sky-600/20 flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-plus"></i> Adicionar à simulação
+                </button>
+            </form>
+        </div>
+
+        <div class="lg:col-span-2 bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-bold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-list-check text-sky-400"></i> Equipamentos da carga
+                </h2>
+                <span id="contador-ativos" class="text-xs text-slate-500">—</span>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs text-slate-300 tbl min-w-[980px]">
+                    <thead class="bg-slate-900 text-slate-400 font-semibold tracking-wide">
+                        <tr>
+                            <th class="p-2.5">Equipamento</th>
+                            <th class="p-2.5 w-20">Pot. (kW)</th>
+                            <th class="p-2.5 w-14">Qtd</th>
+                            <th class="p-2.5 w-44">Intervalos de uso</th>
+                            <th class="p-2.5 w-16">Prob.</th>
+                            <th class="p-2.5 w-16" title="Quanto o consumo acompanha o índice climático mensal. Positivo sobe no verão, negativo sobe no inverno.">Sazonal</th>
+                            <th class="p-2.5 w-14">Sáb</th>
+                            <th class="p-2.5 w-14">Dom</th>
+                            <th class="p-2.5 w-20" title="Carga cíclica de 24 h e seu fator de ciclo">Cíclica</th>
+                            <th class="p-2.5 w-24 text-center">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabela-equipamentos" class="divide-y divide-slate-700/50"></tbody>
+                </table>
+            </div>
+            <p id="aviso-vazio" class="hidden text-sm text-slate-400 py-8 text-center">Nenhum equipamento na carga. Adicione um ao lado ou clique em restaurar padrão.</p>
+        </div>
+    </div>
+
+    <!-- ABAS -->
+    <div class="flex gap-2">
+        <button id="aba-btn-diario" onclick="mostrarAba('diario')" class="aba-ativa px-5 py-2.5 rounded-xl text-sm font-semibold transition flex items-center gap-2">
+            <i class="fa-solid fa-clock"></i> Dia típico
+        </button>
+        <button id="aba-btn-anual" onclick="mostrarAba('anual')" class="aba-inativa px-5 py-2.5 rounded-xl text-sm font-semibold transition flex items-center gap-2">
+            <i class="fa-solid fa-calendar-days"></i> Ano completo — 8.760 h
+        </button>
+    </div>
+
+    <!-- ================= ABA DIÁRIA ================= -->
+    <section id="aba-diario" class="space-y-6">
+
+        <div class="bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-xl">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-1">Mês analisado</label>
+                    <select id="sel-mes" onchange="atualizarDiario()" class="inp !text-sm !py-2"></select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-1">Tipo de dia</label>
+                    <select id="sel-tipodia" onchange="atualizarDiario()" class="inp !text-sm !py-2">
+                        <option value="0">Dia útil</option>
+                        <option value="1">Sábado</option>
+                        <option value="2">Domingo ou feriado</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-1">Base do pico</label>
+                    <select id="sel-base" onchange="atualizarDiario()" class="inp !text-sm !py-2">
+                        <option value="potencia">Potência instantânea coincidente</option>
+                        <option value="energia">Média horária (kWh/h)</option>
+                    </select>
+                </div>
+            </div>
+            <p class="text-[11px] text-slate-500 mt-3">A média horária distribui a energia dentro da hora, então um chuveiro de 20 min aparece como 1,8 kW. A potência instantânea soma a placa cheia de tudo que estiver ligado na hora — é a base correta para dimensionar disjuntor, inversor e banco de baterias.</p>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-lg">
+                <div class="text-slate-400 text-xs font-semibold mb-1">Consumo esperado no dia</div>
+                <div class="text-2xl font-extrabold text-sky-400" id="kpi-consumo">0,00 kWh</div>
+                <div class="text-xs text-slate-400 mt-2" id="kpi-consumo-det">Determinístico: 0,00 kWh</div>
+            </div>
+            <div class="bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-lg">
+                <div class="text-slate-400 text-xs font-semibold mb-1">Demanda média de pico</div>
+                <div class="text-2xl font-extrabold text-indigo-400" id="kpi-pico-medio">0,00 kW</div>
+                <div class="text-xs text-slate-400 mt-2" id="kpi-pico-det">Determinístico: 0,00 kW</div>
+            </div>
+            <div class="bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-lg">
+                <div class="text-slate-400 text-xs font-semibold mb-1">Pico P95 para dimensionar</div>
+                <div class="text-2xl font-extrabold text-amber-400" id="kpi-pico-p95">0,00 kW</div>
+                <div class="text-xs text-amber-500/80 mt-2">Só 5% dos dias ultrapassam</div>
+            </div>
+            <div class="bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-lg">
+                <div class="text-slate-400 text-xs font-semibold mb-1">Fator de carga</div>
+                <div class="text-2xl font-extrabold text-emerald-400" id="kpi-fc">0,00</div>
+                <div class="text-xs text-slate-400 mt-2" id="kpi-fc-det">Determinístico: 0,00</div>
+            </div>
+        </div>
+
+        <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl">
+            <h3 class="text-base font-bold text-white mb-4 flex items-center gap-2">
+                <i class="fa-solid fa-chart-line text-sky-400"></i> Curva do dia: determinística contra Monte Carlo
+            </h3>
+            <div class="h-80 w-full"><canvas id="chartCurvaPrincipal"></canvas></div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl">
+                <h3 class="text-base font-bold text-white mb-4 flex items-center gap-2">
+                    <i class="fa-solid fa-chart-column text-indigo-400"></i> Contribuição média de cada equipamento
+                </h3>
+                <div class="h-72 w-full"><canvas id="chartDecomposicao"></canvas></div>
+            </div>
+            <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl">
+                <h3 class="text-base font-bold text-white mb-4 flex items-center gap-2">
+                    <i class="fa-solid fa-chart-bar text-amber-400"></i> Distribuição dos picos simulados
+                </h3>
+                <div class="h-72 w-full"><canvas id="chartHistograma"></canvas></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ================= ABA ANUAL ================= -->
+    <section id="aba-anual" class="hidden space-y-6">
+
+        <div class="bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-xl">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h3 class="text-base font-bold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-calendar-days text-sky-400"></i> Série cronológica do ano
+                    </h3>
+                    <p id="texto-status-anual" class="text-xs text-slate-400 mt-1">O ano ainda não foi simulado.</p>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button onclick="rodarAnual()" id="btn-rodar-anual" class="bg-sky-600 hover:bg-sky-500 text-white txt-branco px-5 py-2.5 rounded-xl text-sm font-semibold transition flex items-center gap-2 shadow-lg shadow-sky-600/20">
+                        <i class="fa-solid fa-play"></i> Simular o ano
+                    </button>
+                    <button onclick="exportarCSVHorario()" id="btn-csv-h" disabled class="bg-slate-700 hover:bg-slate-600 disabled:opacity-40 disabled:cursor-not-allowed text-slate-200 px-4 py-2.5 rounded-xl text-xs font-medium transition flex items-center gap-2 border border-slate-600">
+                        <i class="fa-solid fa-table"></i> Exportar 8.760 h
+                    </button>
+                    <button onclick="exportarCSVDiario()" id="btn-csv-d" disabled class="bg-slate-700 hover:bg-slate-600 disabled:opacity-40 disabled:cursor-not-allowed text-slate-200 px-4 py-2.5 rounded-xl text-xs font-medium transition flex items-center gap-2 border border-slate-600">
+                        <i class="fa-solid fa-table-list"></i> Exportar resumo diário
+                    </button>
+                </div>
+            </div>
+            <div id="barra-progresso-wrap" class="hidden mt-4">
+                <div class="h-2 bg-slate-900 rounded-full overflow-hidden border border-slate-700">
+                    <div id="barra-progresso" class="h-full bg-sky-500 transition-all duration-150" style="width:0%"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-lg">
+                <div class="text-slate-400 text-xs font-semibold mb-1">Consumo anual</div>
+                <div class="text-2xl font-extrabold text-sky-400" id="kpi-a-consumo">—</div>
+                <div class="text-xs text-slate-400 mt-2" id="kpi-a-consumo-med">Média diária: —</div>
+            </div>
+            <div class="bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-lg">
+                <div class="text-slate-400 text-xs font-semibold mb-1">Demanda máxima do ano</div>
+                <div class="text-2xl font-extrabold text-rose-400" id="kpi-a-pico">—</div>
+                <div class="text-xs text-slate-400 mt-2" id="kpi-a-pico-quando">—</div>
+            </div>
+            <div class="bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-lg">
+                <div class="text-slate-400 text-xs font-semibold mb-1">Demanda P95 das 8.760 h</div>
+                <div class="text-2xl font-extrabold text-amber-400" id="kpi-a-p95">—</div>
+                <div class="text-xs text-amber-500/80 mt-2">Referência de demanda contratada</div>
+            </div>
+            <div class="bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-lg">
+                <div class="text-slate-400 text-xs font-semibold mb-1">Fator de carga anual</div>
+                <div class="text-2xl font-extrabold text-emerald-400" id="kpi-a-fc">—</div>
+                <div class="text-xs text-slate-400 mt-2" id="kpi-a-horas">—</div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div class="bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-lg">
+                <div class="text-slate-400 text-xs font-semibold mb-1">Consumo médio por tipo de dia</div>
+                <div class="text-sm text-slate-200 mt-2 space-y-1" id="kpi-a-tipos">—</div>
+            </div>
+            <div class="bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-lg">
+                <div class="text-slate-400 text-xs font-semibold mb-1">Mês de maior consumo</div>
+                <div class="text-xl font-extrabold text-indigo-400 mt-1" id="kpi-a-mes-alto">—</div>
+                <div class="text-xs text-slate-400 mt-2" id="kpi-a-mes-baixo">—</div>
+            </div>
+            <div class="bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-lg">
+                <div class="text-slate-400 text-xs font-semibold mb-1">Amplitude sazonal</div>
+                <div class="text-xl font-extrabold text-amber-400 mt-1" id="kpi-a-amplitude">—</div>
+                <div class="text-xs text-slate-400 mt-2">Diferença entre o mês mais alto e o mais baixo</div>
+            </div>
+        </div>
+
+        <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl">
+            <h3 class="text-base font-bold text-white mb-1 flex items-center gap-2">
+                <i class="fa-solid fa-chart-area text-sky-400"></i> Consumo diário ao longo do ano
+            </h3>
+            <p class="text-xs text-slate-400 mb-4">Cada barra é um dia. Azul é dia útil, roxo é sábado, âmbar é domingo ou feriado.</p>
+            <div class="h-80 w-full"><canvas id="chartAnualDiario"></canvas></div>
+        </div>
+
+        <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                <h3 class="text-base font-bold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-wave-square text-indigo-400"></i> Série horária
+                </h3>
+                <select id="sel-janela" onchange="renderSerieHoraria()" class="inp !text-xs !py-1.5 sm:w-56"></select>
+            </div>
+            <div class="h-80 w-full"><canvas id="chartSerieHoraria"></canvas></div>
+        </div>
+
+        <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl">
+            <h3 class="text-base font-bold text-white mb-1 flex items-center gap-2">
+                <i class="fa-solid fa-table-cells text-emerald-400"></i> Mapa de calor do ano
+            </h3>
+            <p class="text-xs text-slate-400 mb-4">Horas no eixo vertical, dias no horizontal. Mostra de uma vez onde o pico se concentra ao longo do ano.</p>
+            <div class="overflow-x-auto"><canvas id="heatmap" class="w-full"></canvas></div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl">
+                <h3 class="text-base font-bold text-white mb-1 flex items-center gap-2">
+                    <i class="fa-solid fa-arrow-trend-down text-amber-400"></i> Curva de permanência
+                </h3>
+                <p class="text-xs text-slate-400 mb-4">Demanda ordenada da maior para a menor. Quanto mais íngreme no início, mais o sistema é dimensionado para poucas horas do ano.</p>
+                <div class="h-72 w-full"><canvas id="chartPermanencia"></canvas></div>
+            </div>
+            <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl">
+                <h3 class="text-base font-bold text-white mb-1 flex items-center gap-2">
+                    <i class="fa-solid fa-chart-simple text-sky-400"></i> Balanço mensal
+                </h3>
+                <p class="text-xs text-slate-400 mb-4">Energia acumulada no mês e a maior demanda registrada em cada um.</p>
+                <div class="h-72 w-full"><canvas id="chartMensal"></canvas></div>
+            </div>
+        </div>
+
+
+        <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl">
+            <div class="flex flex-col lg:flex-row lg:items-start justify-between gap-3">
+                <div>
+                    <h3 class="text-base font-bold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-scale-balanced text-emerald-400"></i> Modelo contra a conta de energia
+                    </h3>
+                    <p class="text-xs text-slate-400 mt-1">Energia mensal simulada frente ao que a distribuidora registrou.</p>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button onclick="ajustarPotencias()" id="btn-calibrar-nivel" disabled class="bg-slate-700 hover:bg-slate-600 disabled:opacity-40 disabled:cursor-not-allowed text-slate-200 px-3 py-2 rounded-xl text-xs font-medium transition border border-slate-600" title="Multiplica a potência dos equipamentos ativos para o total do modelo casar com o total medido">
+                        <i class="fa-solid fa-arrows-up-down"></i> Ajustar nível
+                    </button>
+                    <button onclick="calibrarIndiceMensal()" id="btn-calibrar-forma" disabled class="bg-slate-700 hover:bg-slate-600 disabled:opacity-40 disabled:cursor-not-allowed text-slate-200 px-3 py-2 rounded-xl text-xs font-medium transition border border-slate-600" title="Corrige o índice climático mensal para o formato da curva casar com a medição">
+                        <i class="fa-solid fa-wave-square"></i> Calibrar sazonalidade
+                    </button>
+                    <button onclick="exportarComparacao()" id="btn-csv-comp" disabled class="bg-slate-700 hover:bg-slate-600 disabled:opacity-40 disabled:cursor-not-allowed text-slate-200 px-3 py-2 rounded-xl text-xs font-medium transition border border-slate-600">
+                        <i class="fa-solid fa-table"></i> Exportar
+                    </button>
+                </div>
+            </div>
+
+            <div id="metricas-comparacao" class="hidden grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4"></div>
+            <div id="caixa-comparacao" class="hidden h-80 w-full mt-4"><canvas id="chartComparacao"></canvas></div>
+            <div id="nota-comparacao" class="hidden mt-4 space-y-1.5"></div>
+            <div id="caixa-tabela-comparacao" class="hidden overflow-x-auto mt-5">
+                <table class="w-full text-left text-xs text-slate-300 tbl min-w-[680px]">
+                    <thead class="bg-slate-900 text-slate-400 font-semibold tracking-wide">
+                        <tr>
+                            <th class="p-2.5">Ciclo</th>
+                            <th class="p-2.5">Período</th>
+                            <th class="p-2.5">Dias</th>
+                            <th class="p-2.5">Medido (kWh)</th>
+                            <th class="p-2.5">Monte Carlo (kWh)</th>
+                            <th class="p-2.5">Determinístico (kWh)</th>
+                            <th class="p-2.5">Desvio</th>
+                        </tr>
+                    </thead>
+                    <tbody id="corpo-comparacao" class="divide-y divide-slate-700/50"></tbody>
+                </table>
+            </div>
+            <p id="aviso-comparacao" class="text-sm text-slate-400 py-10 text-center">Informe a medição da conta de energia para ver a comparação.</p>
+        </div>
+
+        <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl">
+            <h3 class="text-base font-bold text-white mb-4 flex items-center gap-2">
+                <i class="fa-solid fa-receipt text-slate-300"></i> Resumo mês a mês
+            </h3>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs text-slate-300 tbl min-w-[640px]">
+                    <thead class="bg-slate-900 text-slate-400 font-semibold tracking-wide">
+                        <tr>
+                            <th class="p-2.5">Mês</th>
+                            <th class="p-2.5">Dias</th>
+                            <th class="p-2.5">Energia (kWh)</th>
+                            <th class="p-2.5">Média diária (kWh)</th>
+                            <th class="p-2.5">Demanda máxima (kW)</th>
+                            <th class="p-2.5">Fator de carga</th>
+                            <th class="p-2.5">Participação</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabela-mensal" class="divide-y divide-slate-700/50"></tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <footer class="text-[11px] text-slate-500 pb-6 leading-relaxed">
+        Modelo de referência para estudo de carga, montado em três camadas. O índice climático mensal vem da localização: a temperatura média e a variação sazonal são estimadas pela latitude, pela distância do litoral e pela altitude, e a resposta ao calor satura em torno de ±45%. O ramo de atividade define a ocupação da instalação no sábado, no domingo e nos feriados, além de quanto o conjunto reage ao clima. O equipamento traz os seus intervalos de uso ao longo do dia, cada um sorteado por conta própria, mais a sua sensibilidade sazonal e o seu desvio em relação à ocupação do prédio. A energia esperada divide o efeito em duas metades, frequência de uso e duração. É um modelo de estimativa: confronte com medição em campo antes de usar em projeto executivo.
+    </footer>
+
+</div>
+
+<!-- MODAL DE EDIÇÃO -->
+<div id="modal-editar" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="absolute inset-0 modal-fundo" onclick="fecharEditor()"></div>
+    <div class="relative w-full max-w-xl bg-slate-800 border border-slate-700 rounded-2xl shadow-xl max-h-[90vh] overflow-y-auto"
+         role="dialog" aria-modal="true" aria-labelledby="ed-titulo">
+        <form onsubmit="salvarEditor(event)">
+            <div class="flex items-start justify-between gap-4 p-6 pb-4 border-b border-slate-700">
+                <div>
+                    <h2 id="ed-titulo" class="text-lg font-bold text-white">Editar equipamento</h2>
+                    <p class="text-xs text-slate-400 mt-1">As mudanças valem para a curva diária e para o ano inteiro.</p>
+                </div>
+                <button type="button" onclick="fecharEditor()" class="text-slate-400 hover:text-slate-200 p-1.5 rounded-lg transition" title="Fechar">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <div class="p-6 space-y-4">
+                <div>
+                    <label for="ed-nome" class="block text-xs font-semibold text-slate-400 mb-1">Nome</label>
+                    <input id="ed-nome" type="text" required class="inp !text-sm !py-2">
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label for="ed-potencia" class="block text-xs font-semibold text-slate-400 mb-1">Potência (kW)</label>
+                            <input id="ed-potencia" class="inp !text-sm !py-2" type="number" min="0.001" step="any" required>
+                        </div>                        <div>
+                            <label for="ed-qtd" class="block text-xs font-semibold text-slate-400 mb-1">Quantidade</label>
+                            <input id="ed-qtd" class="inp !text-sm !py-2" type="number" min="1" step="1" required>
+                        </div>
+                </div>
+
+                <label class="flex items-center gap-2 text-xs text-slate-300 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5">
+                    <input type="checkbox" id="ed-continuo" onchange="atualizarCamposEditor()" class="accent-sky-500 w-4 h-4">
+                    Carga cíclica de 24 h, como geladeira, freezer ou bomba
+                </label>
+
+                <div id="ed-bloco-janelas">
+                    <div class="flex items-center justify-between gap-2 mb-1.5">
+                        <label class="text-xs font-semibold text-slate-400">Intervalos de uso</label>
+                        <button type="button" onclick="adicionarJanela('editor')" class="text-[11px] text-sky-400 hover:text-sky-300 font-medium transition">
+                            <i class="fa-solid fa-plus"></i> intervalo
+                        </button>
+                    </div>
+                    <div id="janelas-editor" class="space-y-2"></div>
+                    <p id="total-janelas-editor" class="text-[11px] text-slate-500 mt-1.5"></p>
+                </div>
+
+                <div id="ed-linha-prob">
+                    <label for="ed-prob" class="block text-xs font-semibold text-slate-400 mb-1">Probabilidade de uso em cada intervalo</label>
+                    <input id="ed-prob" class="inp !text-sm !py-2" type="number" min="0.01" max="1" step="0.05">
+                </div>
+
+                <div class="grid grid-cols-3 gap-3">
+                        <div>
+                            <label for="ed-sens" class="block text-xs font-semibold text-slate-400 mb-1">Sensibilidade sazonal</label>
+                            <input id="ed-sens" class="inp !text-sm !py-2" type="number" min="-2" max="3" step="0.1">
+                        </div>                        <div>
+                            <label for="ed-sab" class="block text-xs font-semibold text-slate-400 mb-1">Fator sábado</label>
+                            <input id="ed-sab" class="inp !text-sm !py-2" type="number" min="0" max="3" step="0.05">
+                        </div>                        <div>
+                            <label for="ed-dom" class="block text-xs font-semibold text-slate-400 mb-1">Fator domingo</label>
+                            <input id="ed-dom" class="inp !text-sm !py-2" type="number" min="0" max="3" step="0.05">
+                        </div>
+                </div>
+
+                <div id="ed-linha-duty">
+                        <div>
+                            <label for="ed-duty" class="block text-xs font-semibold text-slate-400 mb-1">Fator de ciclo da carga cíclica</label>
+                            <input id="ed-duty" class="inp !text-sm !py-2" type="number" min="0.01" max="1" step="0.05">
+                        </div>
+                </div>
+
+                <label class="flex items-center gap-2 text-xs text-slate-300 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5">
+                    <input type="checkbox" id="ed-ativo" class="accent-sky-500 w-4 h-4">
+                    Incluir na simulação. Desmarque para pausar sem apagar.
+                </label>
+            </div>
+
+            <div class="flex items-center justify-end gap-2 p-6 pt-0">
+                <button type="button" onclick="fecharEditor()" class="bg-slate-700 hover:bg-slate-600 text-slate-200 px-4 py-2.5 rounded-xl text-sm font-medium transition border border-slate-600">Cancelar</button>
+                <button type="submit" class="bg-sky-600 hover:bg-sky-500 text-white txt-branco px-5 py-2.5 rounded-xl text-sm font-semibold transition shadow-lg shadow-sky-600/20 flex items-center gap-2">
+                    <i class="fa-solid fa-check"></i> Salvar alterações
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+
+<script>
+/* ==========================================================================
+   1. ESTADO E CONFIGURAÇÃO
+   ========================================================================== */
+
+const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const MESES_CURTO = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+const NOMES_TIPO = ['Dia útil','Sábado','Domingo/feriado'];
+
+// Índice climático mensal por região. Quanto maior, mais demanda de refrigeração.
+const PRESETS = {
+    norte:       [1.00,0.98,0.97,0.97,0.98,0.99,1.00,1.02,1.05,1.03,1.01,1.00],
+    nordeste:    [1.18,1.16,1.12,1.02,0.90,0.82,0.79,0.82,0.91,1.02,1.10,1.16],
+    centrooeste: [1.14,1.10,1.08,1.00,0.87,0.77,0.77,0.87,1.06,1.12,1.10,1.12],
+    sudeste:     [1.29,1.27,1.17,0.99,0.83,0.71,0.69,0.75,0.89,1.03,1.13,1.25],
+    sul:         [1.36,1.33,1.19,0.97,0.79,0.67,0.64,0.71,0.85,1.01,1.17,1.31],
+    uniforme:    [1,1,1,1,1,1,1,1,1,1,1,1]
+};
+
+// Campo "Feriados": nacionais fixos + os de Pernambuco e Recife que já vinham marcados
+const FERIADOS_PADRAO = '01/01, 06/03, 21/04, 01/05, 24/06, 07/09, 12/10, 02/11, 15/11, 20/11, 08/12, 25/12';
+const CAMPOS_CLIENTE = ['nome','uc','endereco','cidade','concessionaria','classe','ramo','local',
+                        'lat','lon','alt','responsavel','data','obs'];
+
+// Ramo de atividade: ocupação da instalação por tipo de dia e quanto o conjunto reage ao clima
+const RAMOS = {
+    residencial:  { nome:'Residencial',              sab:1.00, dom:1.00, ganho:1.00 },
+    comercio:     { nome:'Comércio varejista',       sab:0.95, dom:0.35, ganho:1.15 },
+    escritorio:   { nome:'Escritório e serviços',    sab:0.35, dom:0.12, ganho:1.20 },
+    escola:       { nome:'Escola e universidade',    sab:0.20, dom:0.08, ganho:1.10 },
+    saude:        { nome:'Saúde 24 horas',           sab:0.95, dom:0.92, ganho:1.10 },
+    hotelaria:    { nome:'Hotel e pousada',          sab:1.15, dom:1.05, ganho:1.25 },
+    alimentacao:  { nome:'Bar e restaurante',        sab:1.25, dom:0.85, ganho:1.20 },
+    supermercado: { nome:'Supermercado',             sab:1.15, dom:0.70, ganho:1.30 },
+    industria:    { nome:'Indústria',                sab:0.55, dom:0.25, ganho:0.70 },
+    rural:        { nome:'Rural e irrigação',        sab:0.95, dom:0.90, ganho:0.85 },
+    publico:      { nome:'Prédio público',           sab:0.30, dom:0.10, ganho:1.15 },
+    iluminacao:   { nome:'Iluminação pública',       sab:1.00, dom:1.00, ganho:0.30 },
+    telecom:      { nome:'Telecom e data center',    sab:1.00, dom:1.00, ganho:1.15 }
+};
+
+// A classe tarifária sugere o ramo quando o usuário ainda não escolheu um
+const CLASSE_RAMO = {
+    'B1 Residencial':'residencial', 'B1 Residencial baixa renda':'residencial',
+    'B2 Rural':'rural', 'B3 Demais classes':'comercio', 'B4 Iluminação pública':'iluminacao'
+};
+
+// Localidades de referência: latitude, longitude e altitude
+const CIDADES = [
+    ['Rio Branco, AC',       -9.97, -67.81,  153], ['Maceió, AL',          -9.67, -35.74,    7],
+    ['Macapá, AP',            0.03, -51.07,   14], ['Manaus, AM',          -3.12, -60.02,   92],
+    ['Salvador, BA',        -12.97, -38.50,    8], ['Fortaleza, CE',       -3.73, -38.53,   21],
+    ['Brasília, DF',        -15.79, -47.88, 1100], ['Vitória, ES',        -20.32, -40.34,    4],
+    ['Goiânia, GO',         -16.69, -49.26,  749], ['São Luís, MA',        -2.53, -44.30,   24],
+    ['Cuiabá, MT',          -15.60, -56.10,  165], ['Campo Grande, MS',   -20.44, -54.65,  532],
+    ['Belo Horizonte, MG',  -19.92, -43.94,  852], ['Belém, PA',           -1.46, -48.50,   10],
+    ['João Pessoa, PB',      -7.12, -34.86,   37], ['Curitiba, PR',       -25.43, -49.27,  934],
+    ['Recife, PE',           -8.05, -34.90,    4], ['Caruaru, PE',         -8.28, -35.97,  545],
+    ['Petrolina, PE',        -9.39, -40.50,  376], ['Teresina, PI',        -5.09, -42.80,   72],
+    ['Rio de Janeiro, RJ',  -22.91, -43.17,    2], ['Natal, RN',           -5.79, -35.21,   30],
+    ['Porto Alegre, RS',    -30.03, -51.23,   10], ['Porto Velho, RO',     -8.76, -63.90,   85],
+    ['Boa Vista, RR',         2.82, -60.67,   85], ['Florianópolis, SC',  -27.59, -48.55,    3],
+    ['São Paulo, SP',       -23.55, -46.63,  760], ['Aracaju, SE',        -10.91, -37.07,    4],
+    ['Palmas, TO',          -10.18, -48.33,  230]
+];
+
+const CONFIG = {
+    ano: 2026,
+    nSim: 1500,
+    nRep: 25,
+    deslocFDS: 1,
+    stdInicio: 1.0,
+    cvDuracao: 0.20,
+    fatoresMensais: PRESETS.nordeste.slice(),
+    mes: 0,
+    tipoDia: 0,
+    base: 'potencia',
+    perfil: { nome:'Residencial', sab:1.00, dom:1.00, ganho:1.00 }
+};
+
+const equipamentosDefault = [
+    { id:1, nome:'Ar-condicionado',   potencia_kw:1.20, qtd:1, janelas:[{inicio:22, fim:6}],                              mc_prob:0.85, sens_saz: 1.60, fator_sab:1.10, fator_dom:1.20, continuo:false, duty:0.40, ativo:true },
+    { id:2, nome:'Chuveiro elétrico', potencia_kw:5.50, qtd:1, janelas:[{inicio:6.5, fim:6.75}, {inicio:19, fim:19.333}],  mc_prob:0.90, sens_saz:-0.50, fator_sab:1.15, fator_dom:1.10, continuo:false, duty:0.40, ativo:true },
+    { id:3, nome:'Geladeira',         potencia_kw:0.20, qtd:1, janelas:[],                                                 mc_prob:1.00, sens_saz: 0.50, fator_sab:1.02, fator_dom:1.05, continuo:true,  duty:0.40, ativo:true },
+    { id:4, nome:'Iluminação',        potencia_kw:0.15, qtd:1, janelas:[{inicio:5.5, fim:6.5}, {inicio:18, fim:23}],       mc_prob:0.95, sens_saz:-0.25, fator_sab:1.10, fator_dom:1.10, continuo:false, duty:0.40, ativo:true },
+    { id:5, nome:'Televisão',         potencia_kw:0.12, qtd:1, janelas:[{inicio:12, fim:14}, {inicio:19, fim:23}],         mc_prob:0.80, sens_saz: 0.00, fator_sab:1.25, fator_dom:1.35, continuo:false, duty:0.40, ativo:true },
+    { id:6, nome:'Máquina de lavar',  potencia_kw:0.50, qtd:1, janelas:[{inicio:9, fim:10.2}],                             mc_prob:0.45, sens_saz: 0.00, fator_sab:1.60, fator_dom:0.80, continuo:false, duty:0.40, ativo:true }
+];
+
+let equipamentos = JSON.parse(JSON.stringify(equipamentosDefault));
+let resultadoAnual = null;
+let rodandoAnual = false;
+let editandoId = null;
+let C = null;                      // paleta do tema em uso
+const graficos = {};
+
+// Equipamentos que entram no cálculo. Pausados ficam cadastrados, mas fora da simulação.
+function equipamentosAtivos() { return equipamentos.filter(eq => eq.ativo !== false); }
+
+/* ==========================================================================
+   2. UTILITÁRIOS
+   ========================================================================== */
+
+function num(v, casas = 2) {
+    if (!isFinite(v)) v = 0;
+    return v.toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas });
+}
+
+// Aceita 2368, 2.368, 2368,5 e 2.368,50
+// Horários circulam em horas decimais no motor e em HH:MM na tela
+function horaParaTexto(h) {
+    let total = Math.round((((h % 24) + 24) % 24) * 60);
+    if (total >= 1440) total = 0;
+    return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+}
+
+function textoParaHora(texto) {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(String(texto == null ? '' : texto).trim());
+    if (!m) return null;
+    const h = +m[1], min = +m[2];
+    if (h > 23 || min > 59) return null;
+    return Math.round((h + min / 60) * 10000) / 10000;
+}
+
+// Um intervalo que termina antes de começar atravessa a meia-noite
+function duracaoJanela(j) {
+    let d = (+j.fim) - (+j.inicio);
+    if (!isFinite(d)) return 0;
+    if (d <= 0) d += 24;
+    return Math.min(24, d);
+}
+
+function janelasDe(eq) {
+    if (Array.isArray(eq.janelas)) return eq.janelas;
+    if (eq.det_inicio != null) return [{ inicio: +eq.det_inicio, fim: (+eq.det_inicio) + (+eq.det_duracao || 1) }];
+    return [];
+}
+
+function horasTotais(eq) {
+    if (eq.continuo) return 24;
+    return janelasDe(eq).reduce((s, j) => s + duracaoJanela(j), 0);
+}
+
+function textoJanelas(eq) {
+    if (eq.continuo) return 'ciclo de 24 h';
+    const js = janelasDe(eq);
+    if (!js.length) return 'sem intervalo';
+    return js.map(j => `${horaParaTexto(j.inicio)}–${horaParaTexto(j.fim)}`).join(' · ');
+}
+
+function parseNumeroBR(texto) {
+    let t = String(texto == null ? '' : texto).trim().replace(/\s|kwh|kw/gi, '');
+    if (!t) return NaN;
+    const ponto = t.includes('.'), virgula = t.includes(',');
+    if (ponto && virgula) t = t.replace(/\./g, '').replace(',', '.');
+    else if (virgula) t = t.replace(',', '.');
+    else if (ponto && /\.\d{3}(\D|$)/.test(t)) t = t.replace(/\./g, '');
+    return parseFloat(t);
+}
+
+function randomNormal(media = 0, desvio = 1) {
+    let u1 = Math.random();
+    while (u1 === 0) u1 = Math.random();
+    const u2 = Math.random();
+    return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2) * desvio + media;
+}
+
+function percentil(dados, q) {
+    if (!dados || dados.length === 0) return 0;
+    const ord = Array.from(dados).sort((a, b) => a - b);
+    const pos = (ord.length - 1) * (q / 100);
+    const base = Math.floor(pos);
+    const resto = pos - base;
+    return ord[base + 1] !== undefined ? ord[base] + resto * (ord[base + 1] - ord[base]) : ord[base];
+}
+
+function maxArr(a) { let m = -Infinity; for (let i = 0; i < a.length; i++) if (a[i] > m) m = a[i]; return m === -Infinity ? 0 : m; }
+function minArr(a) { let m = Infinity; for (let i = 0; i < a.length; i++) if (a[i] < m) m = a[i]; return m === Infinity ? 0 : m; }
+function somaArr(a) { let s = 0; for (let i = 0; i < a.length; i++) s += a[i]; return s; }
+
+function proximoFrame() { return new Promise(r => setTimeout(r, 0)); }
+
+function dataBR(iso) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(iso || '')) return iso || '';
+    const [a, m, d] = iso.split('-');
+    return `${d}/${m}/${a}`;
+}
+
+/**
+ * Clima estimado a partir da posição. A temperatura média cai com a latitude e com a
+ * altitude; a variação sazonal cresce com a latitude e com a distância do litoral.
+ * A resposta da carga ao calor satura, para o índice não explodir em climas frios.
+ */
+function climaDoLocal(lat, lon, alt) {
+    if (!isFinite(lat)) return null;
+    lon = isFinite(lon) ? lon : -45;
+    alt = isFinite(alt) ? alt : 0;
+
+    const tMedia = 28.8 - 0.294 * Math.abs(lat) - 0.0032 * alt;
+    const amplitude = 0.85 + 0.0048 * lat * lat + 0.0018 * Math.abs(lat) * Math.max(0, Math.abs(lon) - 45);
+    const fase = lat < 0 ? 1.1 : 7.1;                       // pico no verão do hemisfério
+    const ganho = Math.min(0.58, Math.max(0.28, 0.45 * (1 + 0.035 * (22 - tMedia))));
+
+    const temp = [], bruto = [];
+    for (let m = 0; m < 12; m++) {
+        const t = tMedia + amplitude * Math.cos(2 * Math.PI * (m - fase) / 12);
+        temp.push(t);
+        bruto.push(Math.min(2, Math.max(0.3, 1 + ganho * Math.tanh((t - tMedia) / 3.5))));
+    }
+    const media = somaArr(bruto) / 12;
+    return { fatores: bruto.map(v => Math.round(v / media * 1000) / 1000), tMedia, amplitude, temp };
+}
+
+function slugArquivo(texto) {
+    return (texto || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+}
+
+function baixarArquivo(nome, conteudo, tipo) {
+    const blob = new Blob(['\ufeff' + conteudo], { type: tipo });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = nome;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+/* ==========================================================================
+   3. CALENDÁRIO — DIAS ÚTEIS, FINS DE SEMANA E FERIADOS
+   ========================================================================== */
+
+function isoParaData(iso) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(iso || '')) return null;
+    const [a, m, d] = iso.split('-').map(Number);
+    if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+    const dt = new Date(a, m - 1, d);
+    return (dt.getFullYear() === a && dt.getMonth() === m - 1 && dt.getDate() === d) ? dt : null;
+}
+
+function dataParaIso(d) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function diasEntre(a, b) { return Math.round((b - a) / 86400000); }
+
+function dataCurta(iso) {
+    const d = isoParaData(iso);
+    return d ? `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}` : '';
+}
+
+function ehBissexto(ano) { return (ano % 4 === 0 && ano % 100 !== 0) || ano % 400 === 0; }
+function diasNoAno(ano) { return ehBissexto(ano) ? 366 : 365; }
+
+// Algoritmo gregoriano anônimo (Meeus/Jones/Butcher)
+function domingoDePascoa(ano) {
+    const a = ano % 19, b = Math.floor(ano / 100), c = ano % 100;
+    const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
+    const g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+    const i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7;
+    const m = Math.floor((a + 11 * h + 22 * l) / 451);
+    const mes = Math.floor((h + l - 7 * m + 114) / 31);
+    const dia = ((h + l - 7 * m + 114) % 31) + 1;
+    return new Date(ano, mes - 1, dia);
+}
+
+function chaveData(d) { return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`; }
+
+// Móveis dependem da Páscoa, então mudam a cada ano e entram sozinhos
+function feriadosMoveis(ano) {
+    const pascoa = domingoDePascoa(ano);
+    const desloca = d => { const x = new Date(pascoa); x.setDate(x.getDate() + d); return chaveData(x); };
+    return [
+        { nome: 'Carnaval', data: desloca(-47) },
+        { nome: 'Sexta-feira Santa', data: desloca(-2) },
+        { nome: 'Corpus Christi', data: desloca(60) }
+    ];
+}
+
+function montarFeriados(ano) {
+    const set = new Set();
+    if (!document.getElementById('cfg-feriados').checked) return set;
+
+    (document.getElementById('cfg-feriados-reg').value || '').split(',').forEach(item => {
+        const t = item.trim();
+        if (!/^\d{1,2}\/\d{1,2}$/.test(t)) return;
+        const [dd, mm] = t.split('/').map(Number);
+        if (dd >= 1 && dd <= 31 && mm >= 1 && mm <= 12) {
+            set.add(`${String(dd).padStart(2,'0')}/${String(mm).padStart(2,'0')}`);
+        }
+    });
+
+    const pascoa = domingoDePascoa(ano);
+    const desloca = d => { const x = new Date(pascoa); x.setDate(x.getDate() + d); return chaveData(x); };
+    [-48, -47, -2, 60].forEach(d => set.add(desloca(d)));   // Carnaval segunda e terça, Sexta Santa, Corpus Christi
+    return set;
+}
+
+function tipoDoDia(data, feriados) {
+    if (feriados.has(chaveData(data))) return 2;
+    const dow = data.getDay();
+    if (dow === 0) return 2;
+    if (dow === 6) return 1;
+    return 0;
+}
+
+/* ==========================================================================
+   4. MOTOR DE SIMULAÇÃO
+   ========================================================================== */
+
+// Fator combinado: clima do mês (ponderado pela sensibilidade do equipamento) x tipo de dia
+function fatorEquipamento(eq, mes, tipo) {
+    const perfil = CONFIG.perfil;
+    const clima = CONFIG.fatoresMensais[mes] ?? 1;
+    const fSaz = Math.max(0.1, 1 + (eq.sens_saz || 0) * perfil.ganho * (clima - 1));
+    const fEq = tipo === 1 ? (eq.fator_sab ?? 1) : tipo === 2 ? (eq.fator_dom ?? 1) : 1;
+    const fOcupacao = tipo === 1 ? perfil.sab : tipo === 2 ? perfil.dom : 1;
+    return fSaz * Math.max(0.05, fEq * fOcupacao);
+}
+
+// Distribui a carga nas horas com fração real de ocupação (sem arredondar para 1 h)
+function alocar(curvaE, curvaP, kw, inicio, duracao, decompArr, peso) {
+    let restante = Math.min(24, duracao);
+    let hora = Math.floor(inicio);
+    let offset = inicio - hora;
+    let guarda = 0;
+    while (restante > 1e-9 && guarda < 30) {
+        const fracao = Math.min(1 - offset, restante);
+        const idx = ((hora % 24) + 24) % 24;
+        curvaE[idx] += kw * fracao;
+        curvaP[idx] += kw;
+        if (decompArr) decompArr[idx] += kw * fracao * peso;
+        restante -= fracao; offset = 0; hora++; guarda++;
+    }
+}
+
+/**
+ * Simula um dia. Escreve em curvaE (média horária) e curvaP (potência coincidente).
+ * estocastico=false devolve o caso determinístico nominal.
+ */
+function simularDia(mes, tipo, estocastico, curvaE, curvaP, decomp, peso) {
+    for (let i = 0; i < equipamentos.length; i++) {
+        const eq = equipamentos[i];
+        if (eq.ativo === false) continue;
+        const kw = eq.potencia_kw * eq.qtd;
+        if (!(kw > 0)) continue;
+
+        const fTot = fatorEquipamento(eq, mes, tipo);
+        const raiz = Math.sqrt(fTot);
+        const alvo = decomp ? decomp[eq.id] : null;
+
+        if (eq.continuo) {
+            const dutyBase = Math.min(1, Math.max(0.02, (eq.duty || 0.4) * fTot));
+            for (let h = 0; h < 24; h++) {
+                const duty = estocastico
+                    ? Math.min(1, Math.max(0.02, dutyBase * (0.85 + Math.random() * 0.3)))
+                    : dutyBase;
+                const carga = kw * duty;
+                curvaE[h] += carga;
+                curvaP[h] += carga;
+                if (alvo) alvo[h] += carga * peso;
+            }
+            continue;
+        }
+
+        const probEf = Math.min(1, (eq.mc_prob ?? 1) * raiz);
+        const janelas = janelasDe(eq);
+
+        // Cada intervalo é sorteado por conta própria: dá para assistir de tarde e não de noite
+        for (let j = 0; j < janelas.length; j++) {
+            if (estocastico && Math.random() > probEf) continue;
+
+            let inicio = janelas[j].inicio + (tipo !== 0 ? CONFIG.deslocFDS : 0);
+            let dur = Math.max(0.01, duracaoJanela(janelas[j]) * raiz);
+
+            if (estocastico) {
+                inicio = randomNormal(inicio, CONFIG.stdInicio);
+                dur = Math.max(0.05, randomNormal(dur, Math.max(0.05, dur * CONFIG.cvDuracao)));
+            }
+            inicio = ((inicio % 24) + 24) % 24;
+            alocar(curvaE, curvaP, kw, inicio, Math.min(24, dur), alvo, peso);
+        }
+    }
+}
+
+/**
+ * Soma a energia esperada entre duas leituras, dia a dia, usando o mês e o
+ * tipo de dia reais de cada data. Serve para ciclos que atravessam o mês.
+ */
+function energiaModeloPeriodo(isoAnterior, isoAtual) {
+    const r = resultadoAnual;
+    if (!r || !r.mediaTipoMes) return null;
+    const a = isoParaData(isoAnterior), b = isoParaData(isoAtual);
+    if (!a || !b) return null;
+    const dias = diasEntre(a, b);
+    if (dias < 1 || dias > 200) return null;
+
+    const feriadosPorAno = {};
+    const diasPorMes = new Array(12).fill(0);
+    let mc = 0, det = 0, variancia = 0;
+    const cursor = new Date(a.getFullYear(), a.getMonth(), a.getDate());
+
+    for (let i = 0; i < dias; i++) {
+        cursor.setDate(cursor.getDate() + 1);          // o consumo vai do dia seguinte à leitura anterior até a atual
+        const ano = cursor.getFullYear(), mes = cursor.getMonth();
+        if (!feriadosPorAno[ano]) feriadosPorAno[ano] = montarFeriados(ano);
+        const tipo = tipoDoDia(cursor, feriadosPorAno[ano]);
+        mc += r.mediaTipoMes[mes][tipo];
+        det += r.mediaDetTipoMes[mes][tipo];
+        variancia += r.varTipoMes[mes][tipo];
+        diasPorMes[mes]++;
+    }
+
+    const desvio = Math.sqrt(Math.max(0, variancia));
+    return { mc, det, dias, diasPorMes, p05: Math.max(0, mc - 1.645 * desvio), p95: mc + 1.645 * desvio };
+}
+
+/* ---- Análise do dia típico ---- */
+function analiseDiaria() {
+    const n = Math.max(50, CONFIG.nSim);
+    const mes = CONFIG.mes, tipo = CONFIG.tipoDia;
+
+    const detE = new Float64Array(24), detP = new Float64Array(24);
+    simularDia(mes, tipo, false, detE, detP, null, 0);
+
+    const decomp = {};
+    equipamentosAtivos().forEach(eq => decomp[eq.id] = new Float64Array(24));
+
+    const mediaE = new Float64Array(24);
+    const porHora = Array.from({ length: 24 }, () => new Float64Array(n));
+    const picosP = new Float64Array(n), picosE = new Float64Array(n), energias = new Float64Array(n);
+    const cE = new Float64Array(24), cP = new Float64Array(24);
+
+    for (let i = 0; i < n; i++) {
+        cE.fill(0); cP.fill(0);
+        simularDia(mes, tipo, true, cE, cP, decomp, 1 / n);
+        let en = 0, pkP = 0, pkE = 0;
+        for (let h = 0; h < 24; h++) {
+            mediaE[h] += cE[h] / n;
+            porHora[h][i] = cE[h];
+            en += cE[h];
+            if (cP[h] > pkP) pkP = cP[h];
+            if (cE[h] > pkE) pkE = cE[h];
+        }
+        picosP[i] = pkP; picosE[i] = pkE; energias[i] = en;
+    }
+
+    const p05 = new Float64Array(24), p95 = new Float64Array(24);
+    for (let h = 0; h < 24; h++) { p05[h] = percentil(porHora[h], 5); p95[h] = percentil(porHora[h], 95); }
+
+    const picos = CONFIG.base === 'potencia' ? picosP : picosE;
+    return { detE, detP, mediaE, p05, p95, picos, energias, decomp };
+}
+
+/* ---- Simulação do ano inteiro ---- */
+async function rodarAnual() {
+    if (rodandoAnual) return;
+    if (equipamentosAtivos().length === 0) { alert('Nenhum equipamento ativo. Adicione um equipamento ou tire algum da pausa antes de simular o ano.'); return; }
+
+    lerConfigDaTela();
+    rodandoAnual = true;
+    const btn = document.getElementById('btn-rodar-anual');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Simulando…';
+    document.getElementById('barra-progresso-wrap').classList.remove('hidden');
+
+    const ano = CONFIG.ano;
+    const nd = diasNoAno(ano);
+    const nRep = Math.max(1, CONFIG.nRep);
+    const feriados = montarFeriados(ano);
+
+    const serieE = new Float64Array(nd * 24);
+    const serieP = new Float64Array(nd * 24);
+    const energiaDia = new Float64Array(nd);
+    const energiaMed = new Float64Array(nd);
+    const energiaP05 = new Float64Array(nd);
+    const energiaP95 = new Float64Array(nd);
+    const picoDia = new Float64Array(nd);
+    const tipos = new Uint8Array(nd);
+    const mesesDia = new Uint8Array(nd);
+
+    const energiaDet = new Float64Array(nd);
+    const mensalDet = new Float64Array(12);
+
+    // Energia esperada por mês e tipo de dia: permite somar qualquer ciclo de leitura
+    const somaTipoMes = Array.from({ length: 12 }, () => new Float64Array(3));
+    const somaDetTipoMes = Array.from({ length: 12 }, () => new Float64Array(3));
+    const somaVarTipoMes = Array.from({ length: 12 }, () => new Float64Array(3));
+    const contTipoMes = Array.from({ length: 12 }, () => new Float64Array(3));
+    const mensalMC = new Float64Array(12);
+    const mensalPorRep = Array.from({ length: 12 }, () => new Float64Array(nRep));
+
+    const cE = new Float64Array(24), cP = new Float64Array(24);
+    const buffEn = new Float64Array(nRep);
+
+    for (let d = 0; d < nd; d++) {
+        const data = new Date(ano, 0, 1 + d);
+        const mes = data.getMonth();
+        const tipo = tipoDoDia(data, feriados);
+        mesesDia[d] = mes; tipos[d] = tipo;
+
+        let soma = 0;
+        for (let r = 0; r < nRep; r++) {
+            cE.fill(0); cP.fill(0);
+            simularDia(mes, tipo, true, cE, cP, null, 0);
+            let en = 0, pk = 0;
+            for (let h = 0; h < 24; h++) {
+                en += cE[h];
+                const v = CONFIG.base === 'potencia' ? cP[h] : cE[h];
+                if (v > pk) pk = v;
+            }
+            buffEn[r] = en; soma += en;
+            mensalPorRep[mes][r] += en;
+            if (r === 0) {
+                const off = d * 24;
+                for (let h = 0; h < 24; h++) { serieE[off + h] = cE[h]; serieP[off + h] = cP[h]; }
+                energiaDia[d] = en; picoDia[d] = pk;
+            }
+        }
+        energiaMed[d] = soma / nRep;
+        mensalMC[mes] += energiaMed[d];
+
+        // Caso determinístico do mesmo dia, para comparar com a conta
+        cE.fill(0); cP.fill(0);
+        simularDia(mes, tipo, false, cE, cP, null, 0);
+        let enDet = 0;
+        for (let h = 0; h < 24; h++) enDet += cE[h];
+        energiaDet[d] = enDet;
+        mensalDet[mes] += enDet;
+
+        let somaQuad = 0;
+        for (let k = 0; k < nRep; k++) somaQuad += buffEn[k] * buffEn[k];
+        somaTipoMes[mes][tipo] += energiaMed[d];
+        somaDetTipoMes[mes][tipo] += enDet;
+        somaVarTipoMes[mes][tipo] += Math.max(0, somaQuad / nRep - energiaMed[d] * energiaMed[d]);
+        contTipoMes[mes][tipo]++;
+
+        energiaP05[d] = percentil(buffEn, 5);
+        energiaP95[d] = percentil(buffEn, 95);
+
+        if (d % 20 === 19) {
+            document.getElementById('barra-progresso').style.width = ((d + 1) / nd * 100).toFixed(1) + '%';
+            await proximoFrame();
+        }
+    }
+
+    // Agregações mensais
+    const mensalE = new Float64Array(12), mensalPico = new Float64Array(12), mensalDias = new Float64Array(12);
+    const serieBase = CONFIG.base === 'potencia' ? serieP : serieE;
+    for (let d = 0; d < nd; d++) {
+        const m = mesesDia[d];
+        mensalE[m] += energiaDia[d];
+        mensalDias[m]++;
+        for (let h = 0; h < 24; h++) {
+            const v = serieBase[d * 24 + h];
+            if (v > mensalPico[m]) mensalPico[m] = v;
+        }
+    }
+
+    // Consumo médio por tipo de dia
+    const somaTipo = [0, 0, 0], contTipo = [0, 0, 0];
+    for (let d = 0; d < nd; d++) { somaTipo[tipos[d]] += energiaDia[d]; contTipo[tipos[d]]++; }
+
+    // Pico anual e sua data
+    let picoAnual = 0, idxPico = 0;
+    for (let i = 0; i < serieBase.length; i++) if (serieBase[i] > picoAnual) { picoAnual = serieBase[i]; idxPico = i; }
+
+    const mediaTipoMes = Array.from({ length: 12 }, () => new Float64Array(3));
+    const mediaDetTipoMes = Array.from({ length: 12 }, () => new Float64Array(3));
+    const varTipoMes = Array.from({ length: 12 }, () => new Float64Array(3));
+    for (let m = 0; m < 12; m++) {
+        for (let t = 0; t < 3; t++) {
+            const c = contTipoMes[m][t];
+            if (c > 0) {
+                mediaTipoMes[m][t] = somaTipoMes[m][t] / c;
+                mediaDetTipoMes[m][t] = somaDetTipoMes[m][t] / c;
+                varTipoMes[m][t] = somaVarTipoMes[m][t] / c;
+            }
+        }
+    }
+
+    const mensalP05 = new Float64Array(12), mensalP95 = new Float64Array(12);
+    for (let m = 0; m < 12; m++) {
+        mensalP05[m] = percentil(mensalPorRep[m], 5);
+        mensalP95[m] = percentil(mensalPorRep[m], 95);
+    }
+
+    const permanencia = Array.from(serieBase).sort((a, b) => b - a);
+    const consumoTotal = somaArr(energiaDia);
+    const horasAno = nd * 24;
+
+    resultadoAnual = {
+        ano, nd, horasAno, serieE, serieP, serieBase,
+        energiaDia, energiaMed, energiaP05, energiaP95, picoDia,
+        tipos, mesesDia, mensalE, mensalPico, mensalDias,
+        energiaDet, mensalDet, mensalMC, mensalP05, mensalP95, consumoDet: somaArr(energiaDet),
+        mediaTipoMes, mediaDetTipoMes, varTipoMes,
+        somaTipo, contTipo, picoAnual, idxPico, permanencia, consumoTotal, feriados
+    };
+
+    document.getElementById('barra-progresso').style.width = '100%';
+    renderAnual();
+
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-solid fa-rotate"></i> Simular de novo';
+    document.getElementById('btn-csv-h').disabled = false;
+    document.getElementById('btn-csv-d').disabled = false;
+    setTimeout(() => document.getElementById('barra-progresso-wrap').classList.add('hidden'), 400);
+    rodandoAnual = false;
+}
+</script>
+
+<script>
+/* ==========================================================================
+   5. PADRÕES DE GRÁFICO
+   ========================================================================== */
+
+Chart.defaults.animation = false;
+Chart.defaults.color = '#94a3b8';
+Chart.defaults.borderColor = '#334155';
+Chart.defaults.font.family = 'ui-sans-serif, system-ui, sans-serif';
+Chart.defaults.font.size = 11;
+
+function coresTema() {
+    const claro = document.documentElement.dataset.tema === 'claro';
+    return claro ? {
+        eixo:'#57677e', grade:'rgba(148,163,184,0.35)',
+        linha:'#0284c7', linhaFill:'rgba(2,132,199,0.14)',
+        p95:'#b45309', p05:'#94a3b8', det:'#be123c', detPot:'#7c3aed',
+        tipo:['#0284c7','#7c3aed','#d97706'],
+        paleta:['#0284c7','#4f46e5','#059669','#d97706','#db2777','#7c3aed','#ea580c','#0d9488','#dc2626','#9333ea'],
+        serie:'#4f46e5', serieFill:'rgba(79,70,229,0.14)',
+        perm:'#d97706', permFill:'rgba(217,119,6,0.14)', ref:'#0284c7',
+        mensalBar:'#0284c7', mensalLinha:'#be123c',
+        histAlto:'#d97706', histBase:'#0284c7',
+        hmStops:[[241,245,249],[147,197,224],[60,170,158],[224,186,58],[200,42,42]]
+    } : {
+        eixo:'#94a3b8', grade:'rgba(51,65,85,0.6)',
+        linha:'#0ea5e9', linhaFill:'rgba(14,165,233,0.12)',
+        p95:'#f59e0b', p05:'#64748b', det:'#f43f5e', detPot:'#c084fc',
+        tipo:['#38bdf8','#a78bfa','#fbbf24'],
+        paleta:['#38bdf8','#818cf8','#34d399','#fbbf24','#f472b6','#a78bfa','#fb923c','#2dd4bf','#f87171','#c084fc'],
+        serie:'#818cf8', serieFill:'rgba(129,140,248,0.15)',
+        perm:'#f59e0b', permFill:'rgba(245,158,11,0.12)', ref:'#38bdf8',
+        mensalBar:'#38bdf8', mensalLinha:'#f43f5e',
+        histAlto:'#f59e0b', histBase:'#38bdf8',
+        hmStops:[[15,23,42],[13,90,130],[16,150,140],[190,190,60],[239,68,68]]
+    };
+}
+
+function aplicarTema(tema) {
+    document.documentElement.dataset.tema = tema;
+    document.documentElement.classList.toggle('dark', tema !== 'claro');
+    C = coresTema();
+    Chart.defaults.color = C.eixo;
+    Chart.defaults.borderColor = C.grade;
+    const btn = document.getElementById('btn-tema');
+    if (btn) btn.innerHTML = tema === 'claro'
+        ? '<i class="fa-solid fa-moon"></i> Tema escuro'
+        : '<i class="fa-solid fa-sun"></i> Tema claro';
+}
+
+function alternarTema() {
+    aplicarTema(document.documentElement.dataset.tema === 'claro' ? 'escuro' : 'claro');
+    atualizarDiario();
+    if (resultadoAnual) renderAnual();
+}
+
+C = coresTema();
+
+function trocarGrafico(chave, canvasId, config) {
+    if (graficos[chave]) graficos[chave].destroy();
+    graficos[chave] = new Chart(document.getElementById(canvasId), config);
+}
+
+const eixoBase = titulo => ({
+    ticks: { color: C.eixo },
+    grid: { color: C.grade },
+    title: { display: !!titulo, text: titulo || '', color: C.eixo }
+});
+
+// Reduz uma série longa preservando os extremos de cada intervalo
+function decimarMinMax(dados, alvo) {
+    const n = dados.length;
+    if (n <= alvo) return { valores: Array.from(dados), indices: Array.from({ length: n }, (_, i) => i) };
+    const bucket = Math.ceil(n / (alvo / 2));
+    const valores = [], indices = [];
+    for (let i = 0; i < n; i += bucket) {
+        const fim = Math.min(i + bucket, n);
+        let mn = Infinity, mx = -Infinity, iMn = i, iMx = i;
+        for (let j = i; j < fim; j++) {
+            if (dados[j] < mn) { mn = dados[j]; iMn = j; }
+            if (dados[j] > mx) { mx = dados[j]; iMx = j; }
+        }
+        if (iMn <= iMx) { valores.push(mn, mx); indices.push(iMn, iMx); }
+        else { valores.push(mx, mn); indices.push(iMx, iMn); }
+    }
+    return { valores, indices };
+}
+
+function mediaMovel(dados, janela) {
+    const saida = new Array(dados.length).fill(null);
+    const meio = Math.floor(janela / 2);
+    for (let i = 0; i < dados.length; i++) {
+        let s = 0, c = 0;
+        for (let j = i - meio; j <= i + meio; j++) if (j >= 0 && j < dados.length) { s += dados[j]; c++; }
+        saida[i] = s / c;
+    }
+    return saida;
+}
+
+function diasNoMes(ano, mes) { return new Date(ano, mes + 1, 0).getDate(); }
+
+function corEscala(t) {
+    const stops = (C && C.hmStops) || [[15,23,42],[13,90,130],[16,150,140],[190,190,60],[239,68,68]];
+    t = Math.max(0, Math.min(1, t));
+    const p = t * (stops.length - 1);
+    const i = Math.min(stops.length - 2, Math.floor(p));
+    const f = p - i;
+    const c = stops[i].map((v, k) => Math.round(v + (stops[i + 1][k] - v) * f));
+    return `rgb(${c[0]},${c[1]},${c[2]})`;
+}
+
+/* ==========================================================================
+   6. ABA DIÁRIA
+   ========================================================================== */
+
+function atualizarDiario() {
+    lerConfigDaTela();
+    renderTabela();
+    if (equipamentosAtivos().length === 0) { limparDiario(); return; }
+
+    const r = analiseDiaria();
+    const unidade = CONFIG.base === 'potencia' ? 'kW' : 'kWh/h';
+
+    const energiaDet = somaArr(r.detE);
+    const energiaMC = somaArr(r.mediaE);
+    const picoDet = CONFIG.base === 'potencia' ? maxArr(r.detP) : maxArr(r.detE);
+    const picoMedio = r.picos.length ? somaArr(r.picos) / r.picos.length : 0;
+    const picoP95 = percentil(r.picos, 95);
+
+    const fcDet = picoDet > 0 ? energiaDet / (24 * picoDet) : 0;
+    const fcMC = picoMedio > 0 ? energiaMC / (24 * picoMedio) : 0;
+
+    document.getElementById('kpi-consumo').textContent = num(energiaMC) + ' kWh';
+    document.getElementById('kpi-consumo-det').textContent = 'Determinístico: ' + num(energiaDet) + ' kWh';
+    document.getElementById('kpi-pico-medio').textContent = num(picoMedio) + ' ' + unidade;
+    document.getElementById('kpi-pico-det').textContent = 'Determinístico: ' + num(picoDet) + ' ' + unidade;
+    document.getElementById('kpi-pico-p95').textContent = num(picoP95) + ' ' + unidade;
+    document.getElementById('kpi-fc').textContent = num(fcMC);
+    document.getElementById('kpi-fc-det').textContent = 'Determinístico: ' + num(fcDet);
+
+    const horas = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0') + 'h');
+
+    const datasets = [
+        { label: 'Monte Carlo — média', data: Array.from(r.mediaE), borderColor: C.linha, backgroundColor: C.linhaFill, borderWidth: 2.5, tension: 0.25, fill: true, pointRadius: 0 },
+        { label: 'P95', data: Array.from(r.p95), borderColor: C.p95, borderWidth: 1.2, borderDash: [4, 4], fill: false, pointRadius: 0, tension: 0.25 },
+        { label: 'P05', data: Array.from(r.p05), borderColor: C.p05, borderWidth: 1.2, borderDash: [4, 4], fill: false, pointRadius: 0, tension: 0.25 },
+        { label: 'Determinístico', data: Array.from(r.detE), borderColor: C.det, borderWidth: 2, borderDash: [6, 5], pointRadius: 0, stepped: 'middle' }
+    ];
+    if (CONFIG.base === 'potencia') {
+        datasets.push({ label: 'Potência coincidente', data: Array.from(r.detP), borderColor: C.detPot, borderWidth: 1.5, pointRadius: 0, stepped: 'middle', hidden: true });
+    }
+
+    trocarGrafico('curva', 'chartCurvaPrincipal', {
+        type: 'line',
+        data: { labels: horas, datasets },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: { legend: { labels: { boxWidth: 12, usePointStyle: true } } },
+            scales: { x: eixoBase(), y: eixoBase('Demanda (kW)') }
+        }
+    });
+
+    const datasetsDecomp = equipamentosAtivos().map((eq, idx) => ({
+        label: eq.nome,
+        data: Array.from(r.decomp[eq.id] || new Float64Array(24)),
+        backgroundColor: C.paleta[idx % C.paleta.length]
+    }));
+
+    trocarGrafico('decomp', 'chartDecomposicao', {
+        type: 'bar',
+        data: { labels: horas, datasets: datasetsDecomp },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { labels: { boxWidth: 12 } } },
+            scales: { x: { stacked: true, ...eixoBase() }, y: { stacked: true, ...eixoBase('Demanda média (kW)') } }
+        }
+    });
+
+    const nBins = 18;
+    const mn = minArr(r.picos), mx = maxArr(r.picos);
+    const passo = (mx - mn) / nBins || 1;
+    const bins = new Array(nBins).fill(0);
+    const valoresBin = Array.from({ length: nBins }, (_, i) => mn + i * passo);
+    const rotulos = valoresBin.map(v => num(v, 1));
+    for (let i = 0; i < r.picos.length; i++) {
+        let idx = Math.floor((r.picos[i] - mn) / passo);
+        if (idx >= nBins) idx = nBins - 1;
+        if (idx < 0) idx = 0;
+        bins[idx]++;
+    }
+    const corteP95 = percentil(r.picos, 95);
+
+    trocarGrafico('hist', 'chartHistograma', {
+        type: 'bar',
+        data: {
+            labels: rotulos,
+            datasets: [{
+                label: 'Dias simulados',
+                data: bins,
+                backgroundColor: valoresBin.map(v => v >= corteP95 ? C.histAlto : C.histBase)
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: { x: eixoBase('Pico do dia (' + unidade + ')'), y: eixoBase('Frequência') }
+        }
+    });
+}
+
+function limparDiario() {
+    ['kpi-consumo','kpi-pico-medio','kpi-pico-p95','kpi-fc'].forEach(id => document.getElementById(id).textContent = '—');
+    ['curva','decomp','hist'].forEach(k => { if (graficos[k]) { graficos[k].destroy(); delete graficos[k]; } });
+}
+
+/* ==========================================================================
+   7. ABA ANUAL
+   ========================================================================== */
+
+function renderAnual() {
+    const r = resultadoAnual;
+    if (!r) return;
+    const unidade = CONFIG.base === 'potencia' ? 'kW' : 'kWh/h';
+
+    const mediaDiaria = r.consumoTotal / r.nd;
+    const p95h = percentil(r.serieBase, 95);
+    const fcAnual = r.picoAnual > 0 ? r.consumoTotal / (r.horasAno * r.picoAnual) : 0;
+    const diaPico = Math.floor(r.idxPico / 24);
+    const horaPico = r.idxPico % 24;
+    const dataPico = new Date(r.ano, 0, 1 + diaPico);
+
+    document.getElementById('texto-status-anual').textContent =
+        `${r.nd} dias · ${r.horasAno.toLocaleString('pt-BR')} horas simuladas · ${CONFIG.nRep} repetições por dia`;
+
+    document.getElementById('kpi-a-consumo').textContent = num(r.consumoTotal / 1000, 2) + ' MWh';
+    document.getElementById('kpi-a-consumo-med').textContent = 'Média diária: ' + num(mediaDiaria) + ' kWh';
+    document.getElementById('kpi-a-pico').textContent = num(r.picoAnual) + ' ' + unidade;
+    document.getElementById('kpi-a-pico-quando').textContent =
+        `${String(dataPico.getDate()).padStart(2,'0')}/${String(dataPico.getMonth()+1).padStart(2,'0')} às ${String(horaPico).padStart(2,'0')}h · ${NOMES_TIPO[r.tipos[diaPico]]}`;
+    document.getElementById('kpi-a-p95').textContent = num(p95h) + ' ' + unidade;
+    document.getElementById('kpi-a-fc').textContent = num(fcAnual);
+    document.getElementById('kpi-a-horas').textContent =
+        'Equivale a ' + num(r.picoAnual > 0 ? r.consumoTotal / r.picoAnual : 0, 0) + ' h de uso na potência máxima';
+
+    document.getElementById('kpi-a-tipos').innerHTML = [0, 1, 2].map(t =>
+        `<div class="flex justify-between gap-3"><span class="text-slate-400">${NOMES_TIPO[t]}</span><span class="font-semibold">${r.contTipo[t] ? num(r.somaTipo[t]/r.contTipo[t]) : '0,00'} kWh</span></div>`
+    ).join('');
+
+    let mAlto = 0, mBaixo = 0;
+    for (let m = 1; m < 12; m++) {
+        if (r.mensalE[m] > r.mensalE[mAlto]) mAlto = m;
+        if (r.mensalE[m] < r.mensalE[mBaixo]) mBaixo = m;
+    }
+    document.getElementById('kpi-a-mes-alto').textContent = MESES[mAlto] + ' — ' + num(r.mensalE[mAlto], 0) + ' kWh';
+    document.getElementById('kpi-a-mes-baixo').textContent = 'Menor: ' + MESES[mBaixo] + ' — ' + num(r.mensalE[mBaixo], 0) + ' kWh';
+    const amp = r.mensalE[mBaixo] > 0 ? (r.mensalE[mAlto] / r.mensalE[mBaixo] - 1) * 100 : 0;
+    document.getElementById('kpi-a-amplitude').textContent = '+' + num(amp, 1) + '%';
+
+    // --- Gráfico 4: consumo diário ao longo do ano ---
+    const rotulosDia = [];
+    for (let d = 0; d < r.nd; d++) {
+        const dt = new Date(r.ano, 0, 1 + d);
+        rotulosDia.push(`${String(dt.getDate()).padStart(2,'0')}/${String(dt.getMonth()+1).padStart(2,'0')}`);
+    }
+    const cores = Array.from(r.tipos).map(t => C.tipo[t]);
+
+    trocarGrafico('anualDia', 'chartAnualDiario', {
+        type: 'bar',
+        data: {
+            labels: rotulosDia,
+            datasets: [
+                { label: 'Consumo do dia', data: Array.from(r.energiaDia), backgroundColor: cores, borderWidth: 0, barPercentage: 1, categoryPercentage: 1, order: 2 },
+                { type: 'line', label: 'Tendência de 7 dias', data: mediaMovel(Array.from(r.energiaMed), 7), borderColor: C.det, borderWidth: 2, pointRadius: 0, tension: 0.3, order: 1 },
+                { type: 'line', label: 'P95 diário', data: Array.from(r.energiaP95), borderColor: C.p95, borderWidth: 1, borderDash: [3,3], pointRadius: 0, hidden: true, order: 0 },
+                { type: 'line', label: 'P05 diário', data: Array.from(r.energiaP05), borderColor: C.p05, borderWidth: 1, borderDash: [3,3], pointRadius: 0, hidden: true, order: 0 }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { labels: { boxWidth: 12 } },
+                tooltip: { callbacks: { afterTitle: itens => NOMES_TIPO[r.tipos[itens[0].dataIndex]] } }
+            },
+            scales: {
+                x: { ...eixoBase(), ticks: { color: '#94a3b8', maxTicksLimit: 14, autoSkip: true } },
+                y: eixoBase('Energia (kWh/dia)')
+            }
+        }
+    });
+
+    renderSerieHoraria();
+    desenharHeatmap();
+    renderComparacao();
+
+    // --- Curva de permanência ---
+    const perm = decimarMinMax(r.permanencia, 900);
+    const xPerm = perm.indices.map(i => (i / r.horasAno * 100));
+    const nivelP95 = percentil(r.serieBase, 95);
+
+    trocarGrafico('perm', 'chartPermanencia', {
+        type: 'line',
+        data: {
+            labels: xPerm.map(v => num(v, 1)),
+            datasets: [
+                { label: 'Demanda ordenada', data: perm.valores, borderColor: C.perm, backgroundColor: C.permFill, borderWidth: 2, pointRadius: 0, fill: true },
+                { label: 'P95 (' + num(nivelP95) + ' ' + unidade + ')', data: xPerm.map(() => nivelP95), borderColor: C.ref, borderWidth: 1.2, borderDash: [5,4], pointRadius: 0 }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { labels: { boxWidth: 12 } } },
+            scales: {
+                x: { ...eixoBase('% das horas do ano'), ticks: { color: '#94a3b8', maxTicksLimit: 11 } },
+                y: eixoBase('Demanda (' + unidade + ')')
+            }
+        }
+    });
+
+    // --- Balanço mensal ---
+    trocarGrafico('mensal', 'chartMensal', {
+        type: 'bar',
+        data: {
+            labels: MESES_CURTO,
+            datasets: [
+                { label: 'Energia (kWh)', data: Array.from(r.mensalE), backgroundColor: C.mensalBar, yAxisID: 'y', borderRadius: 4 },
+                { type: 'line', label: 'Demanda máxima (' + unidade + ')', data: Array.from(r.mensalPico), borderColor: C.mensalLinha, backgroundColor: C.mensalLinha, borderWidth: 2, pointRadius: 3, yAxisID: 'y1', tension: 0.25 }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: { legend: { labels: { boxWidth: 12 } } },
+            scales: {
+                x: eixoBase(),
+                y: { ...eixoBase('Energia (kWh)'), position: 'left' },
+                y1: { ...eixoBase('Demanda (' + unidade + ')'), position: 'right', grid: { drawOnChartArea: false } }
+            }
+        }
+    });
+
+    // --- Tabela mensal ---
+    const tb = document.getElementById('tabela-mensal');
+    tb.innerHTML = '';
+    const maiorMes = maxArr(r.mensalE) || 1;
+    for (let m = 0; m < 12; m++) {
+        const dias = r.mensalDias[m] || 1;
+        const horas = dias * 24;
+        const fc = r.mensalPico[m] > 0 ? r.mensalE[m] / (horas * r.mensalPico[m]) : 0;
+        const part = r.consumoTotal > 0 ? (r.mensalE[m] / r.consumoTotal * 100) : 0;
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-700/30 transition';
+        tr.innerHTML = `
+            <td class="p-2.5 font-semibold text-white">${MESES[m]}</td>
+            <td class="p-2.5">${r.mensalDias[m]}</td>
+            <td class="p-2.5 text-sky-300">${num(r.mensalE[m], 1)}</td>
+            <td class="p-2.5">${num(r.mensalE[m] / dias, 1)}</td>
+            <td class="p-2.5 text-rose-300">${num(r.mensalPico[m])}</td>
+            <td class="p-2.5">${num(fc)}</td>
+            <td class="p-2.5">
+                <div class="flex items-center gap-2">
+                    <div class="h-1.5 bg-slate-700 rounded-full flex-1 min-w-[40px] overflow-hidden">
+                        <div class="h-full bg-sky-500" style="width:${(r.mensalE[m] / maiorMes * 100).toFixed(1)}%"></div>
+                    </div>
+                    <span class="text-slate-400 w-10 text-right">${num(part, 1)}%</span>
+                </div>
+            </td>`;
+        tb.appendChild(tr);
+    }
+}
+
+/* ---- Modelo contra a conta de energia ---- */
+function comparacaoCiclos() {
+    const r = resultadoAnual;
+    if (!r || !r.mediaTipoMes) return null;
+    const linhas = [];
+    medicao.periodos.forEach(p => {
+        const modelo = energiaModeloPeriodo(p.anterior, p.atual);
+        if (!modelo) return;
+        const medido = (p.energia != null && isFinite(p.energia) && p.energia > 0) ? p.energia : null;
+        linhas.push({
+            rotulo: p.rotulo, anterior: p.anterior, atual: p.atual, medido,
+            mc: modelo.mc, det: modelo.det, p05: modelo.p05, p95: modelo.p95,
+            dias: modelo.dias, diasPorMes: modelo.diasPorMes
+        });
+    });
+    return linhas.length ? linhas : null;
+}
+
+function metricasComparacao() {
+    const linhas = comparacaoCiclos();
+    if (!linhas) return null;
+    const lidos = linhas.filter(l => l.medido != null);
+    if (!lidos.length) return null;
+
+    let somaMed = 0, somaMod = 0, somaAbs = 0, somaDias = 0, pior = lidos[0], piorDesvio = 0;
+    lidos.forEach(l => {
+        somaMed += l.medido;
+        somaMod += l.mc;
+        somaDias += l.dias;
+        const d = Math.abs(l.mc / l.medido - 1);
+        somaAbs += d;
+        if (d > piorDesvio) { piorDesvio = d; pior = l; }
+    });
+
+    const mediaMed = somaMed / lidos.length, mediaMod = somaMod / lidos.length;
+    let sxy = 0, sxx = 0, syy = 0;
+    lidos.forEach(l => {
+        const dx = l.medido - mediaMed, dy = l.mc - mediaMod;
+        sxy += dx * dy; sxx += dx * dx; syy += dy * dy;
+    });
+
+    // Tendência em kWh por dia, para um ciclo longo não ser confundido com crescimento
+    const porDia = lidos.map((l, k) => ({ k, v: l.medido / l.dias }));
+    const mediaK = porDia.reduce((a, o) => a + o.k, 0) / porDia.length;
+    const mediaV = porDia.reduce((a, o) => a + o.v, 0) / porDia.length;
+    let sxxi = 0, sxyi = 0;
+    porDia.forEach(o => { const dx = o.k - mediaK; sxxi += dx * dx; sxyi += dx * (o.v - mediaV); });
+
+    return {
+        linhas, lidos, somaMed, somaMod, somaDias,
+        desvioMedio: somaAbs / lidos.length * 100,
+        vies: somaMed > 0 ? (somaMod / somaMed - 1) * 100 : 0,
+        fator: somaMod > 0 ? somaMed / somaMod : 1,
+        correl: (sxx > 0 && syy > 0) ? sxy / Math.sqrt(sxx * syy) : 0,
+        tendencia: (sxxi > 0 && mediaV > 0) ? (sxyi / sxxi) / mediaV * 100 : 0,
+        pior, piorDesvio
+    };
+}
+
+function renderComparacao() {
+    const r = resultadoAnual;
+    const met = r ? metricasComparacao() : null;
+    const pronto = !!met;
+
+    ['btn-calibrar-nivel', 'btn-calibrar-forma', 'btn-csv-comp']
+        .forEach(id => document.getElementById(id).disabled = !pronto);
+    ['caixa-comparacao', 'metricas-comparacao', 'caixa-tabela-comparacao']
+        .forEach(id => document.getElementById(id).classList.toggle('hidden', !pronto));
+    const aviso = document.getElementById('aviso-comparacao');
+    aviso.classList.toggle('hidden', pronto);
+
+    if (!pronto) {
+        if (graficos.comp) { graficos.comp.destroy(); delete graficos.comp; }
+        document.getElementById('nota-comparacao').classList.add('hidden');
+        aviso.textContent = !r
+            ? 'Simule o ano para comparar o modelo com a conta de energia.'
+            : 'Informe a energia dos ciclos de leitura para ver a comparação.';
+        return;
+    }
+
+    const { linhas, lidos, desvioMedio, vies, fator, correl, tendencia, pior, piorDesvio, somaMed, somaMod, somaDias } = met;
+
+    const cor = v => v ? 'text-emerald-400' : 'text-amber-400';
+    const cartao = (rotulo, valor, classe, nota) =>
+        `<div class="bg-slate-900 border border-slate-700 rounded-xl p-3">
+            <div class="text-[11px] text-slate-400 font-semibold">${rotulo}</div>
+            <div class="text-lg font-extrabold ${classe} mt-0.5">${valor}</div>
+            <div class="text-[11px] text-slate-500 mt-1">${nota}</div>
+        </div>`;
+
+    document.getElementById('metricas-comparacao').innerHTML =
+        cartao('Desvio médio', num(desvioMedio, 1) + '%', cor(desvioMedio <= 10),
+               `${lidos.length} ${lidos.length === 1 ? 'ciclo comparado' : 'ciclos comparados'} · ${somaDias} dias`) +
+        cartao('Viés do modelo', (vies > 0 ? '+' : '') + num(vies, 1) + '%', cor(Math.abs(vies) <= 5),
+               `${num(somaMod, 0)} contra ${num(somaMed, 0)} kWh`) +
+        cartao('Correlação da forma', num(correl, 3), cor(correl >= 0.8),
+               'Quanto a sazonalidade acompanha') +
+        cartao('Pior ciclo', pior.rotulo, cor(piorDesvio <= 0.15),
+               `${num(piorDesvio * 100, 1)}% de diferença · fator de nível ${num(fator, 3)}`);
+
+    const notas = [];
+    if (Math.abs(tendencia) >= 1.5) notas.push(
+        `O consumo diário da conta ${tendencia > 0 ? 'sobe' : 'cai'} cerca de ${num(Math.abs(tendencia), 1)}% por ciclo ao longo do período. ` +
+        'Boa parte dessa variação é tendência de carga, não sazonalidade — calibrar a sazonalidade por cima disso embute o crescimento no índice climático.');
+    if (correl < 0.3) notas.push(
+        'A variação entre ciclos não acompanha a do modelo. Confira o ramo de atividade, a localização e se houve mudança de uso, ampliação ou geração própria no período.');
+    if (Math.abs(vies) >= 10) notas.push(
+        `O modelo está ${vies > 0 ? 'acima' : 'abaixo'} da conta em ${num(Math.abs(vies), 1)}%. ` +
+        `Ajustar nível multiplica a potência dos equipamentos ativos por ${num(fator, 3)}.`);
+    const diasVariados = lidos.map(l => l.dias);
+    if (Math.max(...diasVariados) - Math.min(...diasVariados) >= 5) notas.push(
+        `Os ciclos variam de ${Math.min(...diasVariados)} a ${Math.max(...diasVariados)} dias. ` +
+        'A comparação já leva isso em conta, somando o modelo dia a dia dentro de cada ciclo.');
+
+    const caixaNota = document.getElementById('nota-comparacao');
+    caixaNota.classList.toggle('hidden', notas.length === 0);
+    caixaNota.innerHTML = notas.map(t =>
+        `<p class="text-[11px] text-slate-400 flex gap-2"><i class="fa-solid fa-circle-info text-amber-400 mt-0.5 shrink-0"></i><span>${t}</span></p>`).join('');
+
+    trocarGrafico('comp', 'chartComparacao', {
+        type: 'line',
+        data: {
+            labels: linhas.map(l => l.rotulo),
+            datasets: [
+                { label: 'Medido na conta', data: linhas.map(l => l.medido), borderColor: C.det, backgroundColor: C.det,
+                  borderWidth: 3, pointRadius: 4, pointHoverRadius: 6, tension: 0.25, spanGaps: true },
+                { label: 'Monte Carlo (média)', data: linhas.map(l => l.mc), borderColor: C.linha,
+                  backgroundColor: C.linhaFill, borderWidth: 2.5, pointRadius: 0, tension: 0.25, fill: true },
+                { label: 'Determinístico', data: linhas.map(l => l.det), borderColor: C.detPot,
+                  borderWidth: 2, borderDash: [6, 5], pointRadius: 0, tension: 0.25 },
+                { label: 'P95 Monte Carlo', data: linhas.map(l => l.p95), borderColor: C.p95,
+                  borderWidth: 1, borderDash: [3, 3], pointRadius: 0, tension: 0.25, hidden: true },
+                { label: 'P05 Monte Carlo', data: linhas.map(l => l.p05), borderColor: C.p05,
+                  borderWidth: 1, borderDash: [3, 3], pointRadius: 0, tension: 0.25, hidden: true }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { labels: { boxWidth: 12, usePointStyle: true } },
+                tooltip: {
+                    callbacks: {
+                        title: itens => {
+                            const l = linhas[itens[0].dataIndex];
+                            return `${l.rotulo} · ${dataCurta(l.anterior)} a ${dataCurta(l.atual)} · ${l.dias} dias`;
+                        },
+                        afterBody: itens => {
+                            const l = linhas[itens[0].dataIndex];
+                            if (l.medido == null) return 'Sem leitura neste ciclo';
+                            const d = (l.mc / l.medido - 1) * 100;
+                            return [`Medido ${num(l.medido / l.dias, 1)} kWh/dia · modelo ${num(l.mc / l.dias, 1)} kWh/dia`,
+                                    `Monte Carlo ${d > 0 ? 'acima' : 'abaixo'} da conta em ${num(Math.abs(d), 1)}%`];
+                        }
+                    }
+                }
+            },
+            scales: { x: eixoBase(), y: eixoBase('Energia do ciclo (kWh)') }
+        }
+    });
+
+    const corpo = document.getElementById('corpo-comparacao');
+    corpo.innerHTML = '';
+    linhas.forEach(l => {
+        const desvio = l.medido != null ? (l.mc / l.medido - 1) * 100 : null;
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-700/30 transition';
+        tr.innerHTML = `
+            <td class="p-2.5 font-semibold text-white whitespace-nowrap">${l.rotulo}</td>
+            <td class="p-2.5 text-slate-400 whitespace-nowrap">${dataCurta(l.anterior)} a ${dataCurta(l.atual)}</td>
+            <td class="p-2.5">${l.dias}</td>
+            <td class="p-2.5">${l.medido != null ? num(l.medido, 0) : '<span class="text-slate-600">—</span>'}</td>
+            <td class="p-2.5 text-sky-300">${num(l.mc, 0)}</td>
+            <td class="p-2.5 text-slate-400">${num(l.det, 0)}</td>
+            <td class="p-2.5">${desvio != null
+                ? `<span class="${Math.abs(desvio) <= 10 ? 'text-emerald-400' : 'text-amber-400'}">${desvio > 0 ? '+' : ''}${num(desvio, 1)}%</span>`
+                : '<span class="text-slate-600">—</span>'}</td>`;
+        corpo.appendChild(tr);
+    });
+}
+
+function renderSerieHoraria() {
+    const r = resultadoAnual;
+    if (!r) return;
+    const sel = document.getElementById('sel-janela');
+    const escolha = sel.value || 'ano';
+    const unidade = CONFIG.base === 'potencia' ? 'kW' : 'kWh/h';
+
+    let inicio = 0, fim = r.horasAno, titulo = 'Ano inteiro';
+    if (escolha !== 'ano') {
+        const m = parseInt(escolha, 10);
+        let diaIni = 0;
+        for (let k = 0; k < m; k++) diaIni += diasNoMes(r.ano, k);
+        inicio = diaIni * 24;
+        fim = inicio + diasNoMes(r.ano, m) * 24;
+        titulo = MESES[m];
+    }
+
+    const trecho = r.serieBase.subarray(inicio, fim);
+    const dec = decimarMinMax(trecho, escolha === 'ano' ? 1600 : 4000);
+    const rotulos = dec.indices.map(i => {
+        const abs = inicio + i;
+        const d = Math.floor(abs / 24), h = abs % 24;
+        const dt = new Date(r.ano, 0, 1 + d);
+        return `${String(dt.getDate()).padStart(2,'0')}/${String(dt.getMonth()+1).padStart(2,'0')} ${String(h).padStart(2,'0')}h`;
+    });
+
+    trocarGrafico('serie', 'chartSerieHoraria', {
+        type: 'line',
+        data: {
+            labels: rotulos,
+            datasets: [{
+                label: titulo + ' — demanda horária',
+                data: dec.valores,
+                borderColor: C.serie,
+                backgroundColor: C.serieFill,
+                borderWidth: escolha === 'ano' ? 0.8 : 1.4,
+                pointRadius: 0, fill: true, tension: 0
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { labels: { boxWidth: 12 } }, tooltip: { mode: 'nearest', intersect: false } },
+            scales: {
+                x: { ...eixoBase(), ticks: { color: '#94a3b8', maxTicksLimit: 12, autoSkip: true, maxRotation: 0 } },
+                y: eixoBase('Demanda (' + unidade + ')')
+            }
+        }
+    });
+}
+
+function desenharHeatmap() {
+    const r = resultadoAnual;
+    const cv = document.getElementById('heatmap');
+    if (!r || !cv) return;
+
+    const ml = 44, mr = 16, mt = 12, mb = 28;
+    const cw = 3, ch = 9;
+    const larg = ml + mr + r.nd * cw;
+    const alt = mt + mb + 24 * ch;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+
+    cv.width = Math.round(larg * dpr);
+    cv.height = Math.round(alt * dpr);
+    cv.style.width = '100%';
+    cv.style.maxWidth = larg + 'px';
+    cv.style.minWidth = '620px';
+    cv.style.height = 'auto';
+
+    const ctx = cv.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, larg, alt);
+
+    const mx = maxArr(r.serieBase) || 1;
+    for (let d = 0; d < r.nd; d++) {
+        for (let h = 0; h < 24; h++) {
+            ctx.fillStyle = corEscala(r.serieBase[d * 24 + h] / mx);
+            ctx.fillRect(ml + d * cw, mt + h * ch, cw, ch);
+        }
+    }
+
+    ctx.fillStyle = C.eixo;
+    ctx.font = '9px ui-sans-serif, system-ui, sans-serif';
+    for (let h = 0; h < 24; h += 3) ctx.fillText(String(h).padStart(2, '0') + 'h', 8, mt + h * ch + 7);
+
+    let acc = 0;
+    for (let m = 0; m < 12; m++) {
+        const dm = diasNoMes(r.ano, m);
+        ctx.fillText(MESES_CURTO[m], ml + (acc + dm / 2) * cw - 10, alt - 12);
+        acc += dm;
+    }
+
+    const lx = ml, ly = alt - 8;
+    for (let i = 0; i < 120; i++) { ctx.fillStyle = corEscala(i / 119); ctx.fillRect(lx + i, ly - 4, 1, 5); }
+    ctx.fillStyle = C.eixo;
+    ctx.fillText('0', lx - 6, ly + 1);
+    ctx.fillText(num(mx, 1) + ' ' + (CONFIG.base === 'potencia' ? 'kW' : 'kWh/h'), lx + 126, ly + 1);
+}
+</script>
+
+<script>
+/* ==========================================================================
+   8. TABELA DE EQUIPAMENTOS E EDIÇÃO
+   ========================================================================== */
+
+/* ---- Intervalos de uso ---- */
+let janelasNovo = [{ inicio: 18, fim: 21 }];
+let janelasEditor = [];
+
+function listaJanelas(prefixo) { return prefixo === 'editor' ? janelasEditor : janelasNovo; }
+
+function renderJanelas(prefixo) {
+    const lista = listaJanelas(prefixo);
+    const caixa = document.getElementById('janelas-' + prefixo);
+    if (!caixa) return;
+    caixa.innerHTML = '';
+
+    lista.forEach((j, i) => {
+        const div = document.createElement('div');
+        div.className = 'flex items-center gap-2';
+        div.innerHTML = `
+            <input type="time" class="inp !text-sm !py-1.5" value="${horaParaTexto(j.inicio)}"
+                   onchange="editarJanela('${prefixo}',${i},'inicio',this)" aria-label="Início do intervalo ${i + 1}">
+            <span class="text-[11px] text-slate-500 shrink-0">até</span>
+            <input type="time" class="inp !text-sm !py-1.5" value="${horaParaTexto(j.fim)}"
+                   onchange="editarJanela('${prefixo}',${i},'fim',this)" aria-label="Fim do intervalo ${i + 1}">
+            <span class="text-[11px] text-slate-400 w-14 shrink-0 text-right">${num(duracaoJanela(j), 2)} h</span>
+            <button type="button" onclick="removerJanela('${prefixo}',${i})" class="text-rose-400 hover:text-rose-300 p-1 rounded-lg shrink-0" title="Remover intervalo">
+                <i class="fa-solid fa-xmark"></i>
+            </button>`;
+        caixa.appendChild(div);
+    });
+
+    const soma = lista.reduce((s, j) => s + duracaoJanela(j), 0);
+    document.getElementById('total-janelas-' + prefixo).textContent = lista.length
+        ? `${lista.length} ${lista.length === 1 ? 'intervalo' : 'intervalos'} · ${num(soma, 2)} h por dia`
+        : 'Nenhum intervalo. Adicione ao menos um, ou marque como carga cíclica de 24 h.';
+}
+
+function adicionarJanela(prefixo) {
+    const lista = listaJanelas(prefixo);
+    const ultimo = lista[lista.length - 1];
+    const inicio = ultimo ? ((ultimo.fim + 1) % 24) : 18;
+    lista.push({ inicio, fim: (inicio + 2) % 24 });
+    renderJanelas(prefixo);
+}
+
+function removerJanela(prefixo, i) {
+    listaJanelas(prefixo).splice(i, 1);
+    renderJanelas(prefixo);
+}
+
+function editarJanela(prefixo, i, campo, el) {
+    const lista = listaJanelas(prefixo);
+    const v = textoParaHora(el.value);
+    if (v != null && lista[i]) lista[i][campo] = v;
+    renderJanelas(prefixo);
+}
+
+function copiarJanelas(lista) {
+    return lista.map(j => ({ inicio: +j.inicio, fim: +j.fim }));
+}
+
+const CAMPOS_NUM = {
+    potencia_kw: { passo: 'any', min: 0.001, max: 100000 },
+    qtd:         { passo: 1,    min: 1 },
+    mc_prob:     { passo: 0.05, min: 0.01, max: 1 },
+    sens_saz:    { passo: 0.1,  min: -2, max: 3 },
+    fator_sab:   { passo: 0.05, min: 0,  max: 3 },
+    fator_dom:   { passo: 0.05, min: 0,  max: 3 },
+    duty:        { passo: 0.05, min: 0.01, max: 1 }
+};
+
+function campoNum(eq, campo) {
+    const c = CAMPOS_NUM[campo];
+    return `<input type="number" class="inp" value="${eq[campo]}" step="${c.passo}" min="${c.min}"
+             ${c.max !== undefined ? `max="${c.max}"` : ''} onchange="editarCampo(${eq.id},'${campo}',this)">`;
+}
+
+function renderTabela() {
+    const tbody = document.getElementById('tabela-equipamentos');
+    tbody.innerHTML = '';
+    document.getElementById('aviso-vazio').classList.toggle('hidden', equipamentos.length > 0);
+
+    const ativos = equipamentosAtivos().length;
+    const contador = document.getElementById('contador-ativos');
+    if (equipamentos.length === 0) {
+        contador.textContent = '';
+    } else if (ativos === equipamentos.length) {
+        contador.textContent = `${ativos} ${ativos === 1 ? 'equipamento' : 'equipamentos'} na simulação`;
+    } else {
+        contador.innerHTML = `<span class="text-amber-400">${ativos} de ${equipamentos.length} na simulação · ${equipamentos.length - ativos} em pausa</span>`;
+    }
+
+    equipamentos.forEach(eq => {
+        const pausado = eq.ativo === false;
+        const seguro = eq.nome.replace(/"/g, '&quot;');
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-700/30 transition align-middle' + (pausado ? ' linha-pausada' : '');
+        tr.innerHTML = `
+            <td class="p-2.5">
+                <div class="flex items-center gap-1.5">
+                    <input type="text" class="inp font-semibold" value="${seguro}" onchange="editarTexto(${eq.id},this)">
+                    ${pausado ? '<i class="fa-solid fa-pause text-amber-400 shrink-0" title="Em pausa"></i>' : ''}
+                </div>
+            </td>
+            <td class="p-2.5">${campoNum(eq,'potencia_kw')}</td>
+            <td class="p-2.5">${campoNum(eq,'qtd')}</td>
+            <td class="p-2.5">
+                <div class="leading-tight">
+                    <span class="text-[11px] ${eq.continuo || !janelasDe(eq).length ? 'text-slate-500' : 'text-slate-200'}">${textoJanelas(eq)}</span>
+                    <span class="block text-[10px] text-slate-500">${num(horasTotais(eq), 2)} h por dia</span>
+                </div>
+            </td>
+            <td class="p-2.5">${eq.continuo ? '<span class="text-slate-600 text-[11px]">1,00</span>' : campoNum(eq,'mc_prob')}</td>
+            <td class="p-2.5">${campoNum(eq,'sens_saz')}</td>
+            <td class="p-2.5">${campoNum(eq,'fator_sab')}</td>
+            <td class="p-2.5">${campoNum(eq,'fator_dom')}</td>
+            <td class="p-2.5">
+                <div class="flex items-center gap-1.5">
+                    <input type="checkbox" ${eq.continuo ? 'checked' : ''} class="accent-sky-500 w-3.5 h-3.5 shrink-0" onchange="editarContinuo(${eq.id},this)" title="Carga cíclica de 24 h">
+                    ${eq.continuo ? campoNum(eq,'duty') : '<span class="text-slate-600 text-[11px]">—</span>'}
+                </div>
+            </td>
+            <td class="p-2.5">
+                <div class="flex items-center justify-center gap-0.5">
+                    <button onclick="abrirEditor(${eq.id})" class="text-sky-400 hover:text-sky-300 p-1.5 rounded-lg transition" title="Editar ${seguro}">
+                        <i class="fa-solid fa-pen-to-square"></i>
+                    </button>
+                    <button onclick="alternarPausa(${eq.id})" class="${pausado ? 'text-emerald-400' : 'text-amber-400'} p-1.5 rounded-lg transition" title="${pausado ? 'Voltar para a simulação' : 'Pausar sem apagar'}">
+                        <i class="fa-solid ${pausado ? 'fa-play' : 'fa-pause'}"></i>
+                    </button>
+                    <button onclick="removerEquipamento(${eq.id})" class="text-rose-400 hover:text-rose-300 p-1.5 rounded-lg transition" title="Apagar ${seguro}">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </div>
+            </td>`;
+        tbody.appendChild(tr);
+    });
+}
+
+/* ---- Pausar: tira da simulação mas mantém o cadastro ---- */
+function alternarPausa(id) {
+    const eq = acharEq(id);
+    if (!eq) return;
+    eq.ativo = eq.ativo === false;
+    invalidarAnual();
+    atualizarDiario();
+}
+
+/* ---- Editor em janela ---- */
+function abrirEditor(id) {
+    const eq = acharEq(id);
+    if (!eq) return;
+    editandoId = id;
+    document.getElementById('ed-titulo').textContent = 'Editar ' + eq.nome;
+    const definir = (campo, valor) => document.getElementById('ed-' + campo).value = valor;
+    definir('nome', eq.nome); definir('potencia', eq.potencia_kw); definir('qtd', eq.qtd);
+    definir('prob', eq.mc_prob);
+    janelasEditor = copiarJanelas(janelasDe(eq));
+    renderJanelas('editor');
+    definir('sens', eq.sens_saz); definir('sab', eq.fator_sab); definir('dom', eq.fator_dom);
+    definir('duty', eq.duty != null ? eq.duty : 0.4);
+    document.getElementById('ed-continuo').checked = !!eq.continuo;
+    document.getElementById('ed-ativo').checked = eq.ativo !== false;
+    atualizarCamposEditor();
+    document.getElementById('modal-editar').classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    setTimeout(() => document.getElementById('ed-nome').focus(), 30);
+}
+
+function atualizarCamposEditor() {
+    const ciclica = document.getElementById('ed-continuo').checked;
+    document.getElementById('ed-bloco-janelas').style.display = ciclica ? 'none' : '';
+    document.getElementById('ed-linha-prob').style.display = ciclica ? 'none' : '';
+    document.getElementById('ed-linha-duty').style.display = ciclica ? '' : 'none';
+}
+
+function fecharEditor() {
+    document.getElementById('modal-editar').classList.add('hidden');
+    document.body.style.overflow = '';
+    editandoId = null;
+}
+
+function salvarEditor(e) {
+    e.preventDefault();
+    const eq = acharEq(editandoId);
+    if (!eq) { fecharEditor(); return; }
+    const ler = (campo, min, max, padrao) => {
+        const v = parseFloat(String(document.getElementById('ed-' + campo).value).replace(',', '.'));
+        return isFinite(v) ? Math.min(max, Math.max(min, v)) : padrao;
+    };
+    eq.nome        = (document.getElementById('ed-nome').value || '').trim() || eq.nome;
+    eq.potencia_kw = Math.round(ler('potencia', 0.001, 100000, eq.potencia_kw) * 10000) / 10000;
+    eq.qtd         = Math.round(ler('qtd', 1, 9999, eq.qtd));
+    eq.mc_prob     = ler('prob', 0.01, 1, eq.mc_prob);
+    eq.sens_saz    = ler('sens', -2, 3, eq.sens_saz);
+    eq.fator_sab   = ler('sab', 0, 3, eq.fator_sab);
+    eq.fator_dom   = ler('dom', 0, 3, eq.fator_dom);
+    eq.duty        = ler('duty', 0.01, 1, eq.duty != null ? eq.duty : 0.4);
+    eq.continuo    = document.getElementById('ed-continuo').checked;
+    eq.ativo       = document.getElementById('ed-ativo').checked;
+    if (!eq.continuo && !janelasEditor.length) {
+        alert('Informe ao menos um intervalo de uso, ou marque o equipamento como carga cíclica de 24 h.');
+        return;
+    }
+    eq.janelas = copiarJanelas(janelasEditor);
+    delete eq.det_inicio; delete eq.det_duracao;
+    fecharEditor();
+    invalidarAnual();
+    atualizarDiario();
+}
+
+function acharEq(id) { return equipamentos.find(e => e.id === id); }
+
+function editarCampo(id, campo, el) {
+    const eq = acharEq(id);
+    if (!eq) return;
+    const c = CAMPOS_NUM[campo];
+    let v = parseFloat(String(el.value).replace(',', '.'));
+    if (!isFinite(v)) v = eq[campo];
+    v = Math.max(c.min, c.max !== undefined ? Math.min(c.max, v) : v);
+    if (campo === 'qtd') v = Math.round(v);
+    if (campo === 'potencia_kw') v = Math.round(v * 10000) / 10000;
+    eq[campo] = v;
+    el.value = v;
+    invalidarAnual();
+    atualizarDiario();
+}
+
+function editarTexto(id, el) {
+    const eq = acharEq(id);
+    if (!eq) return;
+    eq.nome = (el.value || '').trim() || eq.nome;
+    invalidarAnual();
+    atualizarDiario();
+}
+
+function editarContinuo(id, el) {
+    const eq = acharEq(id);
+    if (!eq) return;
+    eq.continuo = el.checked;
+    invalidarAnual();
+    atualizarDiario();
+}
+
+function adicionarEquipamento(e) {
+    e.preventDefault();
+    const v = id => document.getElementById(id).value;
+    const ciclica = document.getElementById('eq-continuo').checked;
+    if (!ciclica && !janelasNovo.length) {
+        alert('Informe ao menos um intervalo de uso, ou marque o equipamento como carga cíclica de 24 h.');
+        return;
+    }
+    const novo = {
+        id: Date.now() + Math.floor(Math.random() * 1000),
+        nome: v('eq-nome').trim() || 'Equipamento',
+        potencia_kw: Math.max(0.001, parseFloat(String(v('eq-potencia')).replace(',', '.')) || 1),
+        qtd: Math.max(1, parseInt(v('eq-qtd')) || 1),
+        janelas: copiarJanelas(janelasNovo),
+        mc_prob: Math.min(1, Math.max(0.01, parseFloat(v('eq-prob')) || 0.8)),
+        sens_saz: Math.min(3, Math.max(-2, parseFloat(v('eq-sens')) || 0)),
+        fator_sab: Math.min(3, Math.max(0, parseFloat(v('eq-sab')) || 1)),
+        fator_dom: Math.min(3, Math.max(0, parseFloat(v('eq-dom')) || 1)),
+        continuo: ciclica,
+        duty: Math.min(1, Math.max(0.01, parseFloat(v('eq-duty')) || 0.4)),
+        ativo: true
+    };
+    equipamentos.push(novo);
+    document.getElementById('form-equipamento').reset();
+    janelasNovo = [{ inicio: 18, fim: 21 }];
+    renderJanelas('novo');
+    invalidarAnual();
+    atualizarDiario();
+}
+
+function removerEquipamento(id) {
+    equipamentos = equipamentos.filter(eq => eq.id !== id);
+    invalidarAnual();
+    atualizarDiario();
+}
+
+function restaurarPadrao() {
+    equipamentos = JSON.parse(JSON.stringify(equipamentosDefault));
+    CONFIG.fatoresMensais = PRESETS.nordeste.slice();
+    document.getElementById('cfg-feriados').checked = true;
+    document.getElementById('cfg-feriados-reg').value = FERIADOS_PADRAO;
+    atualizarInfoMoveis();
+    montarGradeMeses();
+    invalidarAnual();
+    atualizarDiario();
+}
+
+/* ==========================================================================
+   9. CONTROLES DE INTERFACE
+   ========================================================================== */
+
+function lerConfigDaTela() {
+    CONFIG.ano = Math.min(2100, Math.max(2000, parseInt(document.getElementById('cfg-ano').value) || 2026));
+    CONFIG.nSim = Math.min(10000, Math.max(100, parseInt(document.getElementById('cfg-nsim').value) || 1500));
+    CONFIG.nRep = Math.min(200, Math.max(1, parseInt(document.getElementById('cfg-nrep').value) || 25));
+    CONFIG.deslocFDS = parseFloat(document.getElementById('cfg-desloc').value) || 0;
+    CONFIG.mes = parseInt(document.getElementById('sel-mes').value) || 0;
+    CONFIG.tipoDia = parseInt(document.getElementById('sel-tipodia').value) || 0;
+    CONFIG.base = document.getElementById('sel-base').value;
+    sincronizarPerfil();
+}
+
+function invalidarAnual() {
+    if (resultadoAnual) {
+        document.getElementById('texto-status-anual').innerHTML =
+            '<span class="text-amber-400"><i class="fa-solid fa-triangle-exclamation"></i> Os dados mudaram. Simule o ano de novo para atualizar os gráficos.</span>';
+    }
+}
+
+/* ---- Tipo de cliente, perfil de uso e localização ---- */
+let ramoEscolhido = false;
+let medicao = { periodos: [] };
+
+/* ---- Medição da conta: ciclos de leitura ---- */
+function diasDoCiclo(p) {
+    const a = isoParaData(p.anterior), b = isoParaData(p.atual);
+    return (a && b) ? diasEntre(a, b) : 0;
+}
+
+function ciclosMedidos() {
+    return medicao.periodos.filter(p =>
+        p.energia != null && isFinite(p.energia) && p.energia > 0 && diasDoCiclo(p) >= 1);
+}
+
+function gerarPeriodos(silencioso) {
+    const mi = parseInt(document.getElementById('med-mes-ini').value, 10);
+    const ai = parseInt(document.getElementById('med-ano-ini').value, 10);
+    const mf = parseInt(document.getElementById('med-mes-fim').value, 10);
+    const af = parseInt(document.getElementById('med-ano-fim').value, 10);
+    if (![mi, ai, mf, af].every(isFinite)) { if (!silencioso) alert('Preencha o mês e o ano inicial e final.'); return; }
+
+    const total = (af - ai) * 12 + (mf - mi) + 1;
+    if (total < 1 || total > 36) {
+        if (!silencioso) alert('O período precisa ter de 1 a 36 ciclos. Confira o mês inicial e o mês final.');
+        return;
+    }
+
+    const dia = parseInt(document.getElementById('med-dia-leitura').value, 10);
+    const usarDia = isFinite(dia) && dia >= 1 && dia <= 31;
+
+    const anteriores = {};
+    medicao.periodos.forEach(p => anteriores[p.chave] = p);
+
+    const novos = [];
+    for (let k = 0; k < total; k++) {
+        const ref = new Date(ai, mi + k, 1);
+        const ano = ref.getFullYear(), mes = ref.getMonth();
+        const chave = `${ano}-${String(mes + 1).padStart(2, '0')}`;
+
+        let atual, anterior;
+        if (usarDia) {
+            atual = new Date(ano, mes, Math.min(dia, new Date(ano, mes + 1, 0).getDate()));
+            const ant = new Date(ano, mes - 1, 1);
+            anterior = new Date(ant.getFullYear(), ant.getMonth(),
+                                Math.min(dia, new Date(ant.getFullYear(), ant.getMonth() + 1, 0).getDate()));
+        } else {
+            atual = new Date(ano, mes + 1, 0);       // último dia do mês
+            anterior = new Date(ano, mes, 0);        // último dia do mês anterior
+        }
+
+        const velho = anteriores[chave];
+        novos.push({
+            chave, ano, mes,
+            rotulo: `${MESES_CURTO[mes]}/${String(ano).slice(-2)}`,
+            anterior: dataParaIso(anterior),
+            atual: dataParaIso(atual),
+            energia: velho ? velho.energia : null
+        });
+    }
+
+    medicao.periodos = novos;
+    renderTabelaMedicao();
+    atualizarResumoMedicao();
+    renderComparacao();
+}
+
+function renderTabelaMedicao() {
+    const corpo = document.getElementById('corpo-medicao');
+    corpo.innerHTML = '';
+    medicao.periodos.forEach((p, i) => {
+        const dias = diasDoCiclo(p);
+        const porDia = (dias > 0 && p.energia) ? p.energia / dias : null;
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-700/30 transition align-middle';
+        tr.innerHTML = `
+            <td class="p-2 font-semibold text-white whitespace-nowrap">${p.rotulo}</td>
+            <td class="p-2"><input type="date" class="inp" value="${p.anterior || ''}" onchange="editarCiclo(${i},'anterior',this)"></td>
+            <td class="p-2"><input type="date" class="inp" value="${p.atual || ''}" onchange="editarCiclo(${i},'atual',this)"></td>
+            <td class="p-2"><input type="number" min="1" max="200" class="inp inp-mes" value="${dias || ''}" onchange="editarCiclo(${i},'dias',this)"></td>
+            <td class="p-2"><input type="number" min="0" step="any" class="inp" value="${p.energia != null ? p.energia : ''}" onchange="editarCiclo(${i},'energia',this)"></td>
+            <td class="p-2 text-slate-400">${porDia != null ? num(porDia, 1) : '<span class="text-slate-600">—</span>'}</td>`;
+        corpo.appendChild(tr);
+    });
+}
+
+function editarCiclo(i, campo, el) {
+    const p = medicao.periodos[i];
+    if (!p) return;
+
+    if (campo === 'energia') {
+        const v = parseNumeroBR(el.value);
+        p.energia = (isFinite(v) && v > 0) ? v : null;
+    } else if (campo === 'dias') {
+        const n = parseInt(el.value, 10);
+        const atual = isoParaData(p.atual);
+        if (isFinite(n) && n >= 1 && n <= 200 && atual) {
+            const ant = new Date(atual);
+            ant.setDate(ant.getDate() - n);
+            p.anterior = dataParaIso(ant);
+        }
+    } else {
+        p[campo] = el.value || null;
+    }
+
+    renderTabelaMedicao();
+    atualizarResumoMedicao();
+    renderComparacao();
+}
+
+function atualizarResumoMedicao() {
+    const el = document.getElementById('resumo-medicao');
+    if (!medicao.periodos.length) { el.textContent = 'Nenhum ciclo gerado'; return; }
+    const lidos = ciclosMedidos();
+    if (!lidos.length) { el.textContent = `${medicao.periodos.length} ciclos · nenhuma energia informada`; return; }
+
+    const total = lidos.reduce((s, p) => s + p.energia, 0);
+    const dias = lidos.reduce((s, p) => s + diasDoCiclo(p), 0);
+    el.textContent = `${lidos.length} de ${medicao.periodos.length} ciclos · ${num(total, 0)} kWh em ${dias} dias · ` +
+                     `${num(total / dias, 1)} kWh por dia`;
+}
+
+function limparMedicao() {
+    medicao.periodos.forEach(p => p.energia = null);
+    document.getElementById('med-colar').value = '';
+    renderTabelaMedicao();
+    atualizarResumoMedicao();
+    renderComparacao();
+}
+
+// Aceita "JAN/25 = 2368", "JAN/25 2368", uma linha por ciclo, ou os números na ordem dos ciclos
+function lerMedicaoColada() {
+    if (!medicao.periodos.length) { alert('Gere os ciclos antes de colar as energias.'); return; }
+
+    const texto = document.getElementById('med-colar').value || '';
+    const chaves = { jan:0, fev:1, mar:2, abr:3, mai:4, jun:5, jul:6, ago:7, set:8, out:9, nov:10, dez:11 };
+    const achados = [];
+    const re = /([a-zçãéêó]{3,9})\s*(?:[\/\-]\s*(\d{2,4}))?\s*[=:]?\s*([\d.,]+)/gi;
+    let m;
+    while ((m = re.exec(texto)) !== null) {
+        const chave = m[1].toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').slice(0, 3);
+        if (!(chave in chaves)) continue;
+        const valor = parseNumeroBR(m[3]);
+        if (!isFinite(valor) || valor <= 0) continue;
+        let ano = m[2] ? parseInt(m[2], 10) : null;
+        if (ano != null && ano < 100) ano += 2000;
+        achados.push({ mes: chaves[chave], ano, valor });
+    }
+
+    let casados = 0, sobraram = 0;
+    if (achados.length) {
+        achados.forEach(a => {
+            let alvo = a.ano ? medicao.periodos.find(p => p.mes === a.mes && p.ano === a.ano) : null;
+            if (!alvo) alvo = medicao.periodos.find(p => p.mes === a.mes && p.energia == null);
+            if (alvo) { alvo.energia = a.valor; casados++; } else sobraram++;
+        });
+        if (!casados) {
+            alert('Os meses lidos não batem com os ciclos gerados. Ajuste o mês inicial e o final, ou gere os ciclos de novo.');
+            return;
+        }
+    } else {
+        const numeros = (texto.match(/[\d.,]+/g) || []).map(parseNumeroBR).filter(v => isFinite(v) && v > 0);
+        if (!numeros.length) {
+            alert('Não consegui ler nenhum valor. Use o formato JAN/25 = 2368, um ciclo por linha ou separados por vírgula.');
+            return;
+        }
+        numeros.slice(0, medicao.periodos.length).forEach((v, i) => { medicao.periodos[i].energia = v; casados++; });
+        sobraram = Math.max(0, numeros.length - medicao.periodos.length);
+    }
+
+    renderTabelaMedicao();
+    atualizarResumoMedicao();
+    document.getElementById('med-colar').value = '';
+    renderComparacao();
+    if (sobraram) alert(`${casados} ciclos preenchidos. ${sobraram} valores não encontraram ciclo correspondente e foram ignorados.`);
+}
+
+function sincronizarPerfil() {
+    const chave = document.getElementById('cli-ramo').value;
+    CONFIG.perfil = RAMOS[chave] || RAMOS.residencial;
+}
+
+function climaDoLocalAtual() {
+    const v = id => parseFloat(String(document.getElementById('cli-' + id).value).replace(',', '.'));
+    return climaDoLocal(v('lat'), v('lon'), v('alt'));
+}
+
+function aoMudarRamo() {
+    ramoEscolhido = true;
+    atualizarCliente();
+    invalidarAnual();
+    atualizarDiario();
+}
+
+function aoMudarClasse() {
+    const sugerido = CLASSE_RAMO[document.getElementById('cli-classe').value];
+    if (sugerido && !ramoEscolhido) {
+        document.getElementById('cli-ramo').value = sugerido;
+        invalidarAnual();
+    }
+    atualizarCliente();
+    atualizarDiario();
+}
+
+function aoMudarLocal() {
+    const i = parseInt(document.getElementById('cli-local').value, 10);
+    if (isFinite(i) && CIDADES[i]) {
+        const [nome, lat, lon, alt] = CIDADES[i];
+        document.getElementById('cli-lat').value = lat;
+        document.getElementById('cli-lon').value = lon;
+        document.getElementById('cli-alt').value = alt;
+        const cidade = document.getElementById('cli-cidade');
+        if (!cidade.value.trim()) cidade.value = nome;
+        atualizarCliente();
+        aplicarPreset('local');
+        return;
+    }
+    atualizarCliente();
+}
+
+function aoMudarCoordenada() {
+    document.getElementById('cli-local').value = '';
+    atualizarCliente();
+    if (climaDoLocalAtual()) aplicarPreset('local');
+}
+
+function atualizarResumos() {
+    const perfil = CONFIG.perfil;
+    document.getElementById('resumo-perfil').textContent =
+        `${perfil.nome}: ocupação de ${num(perfil.sab)} no sábado e ${num(perfil.dom)} no domingo e feriado, ` +
+        `com resposta ao clima ${num(perfil.ganho)}x sobre a sensibilidade de cada equipamento.`;
+
+    const alvo = document.getElementById('resumo-clima');
+    const clima = climaDoLocalAtual();
+    if (!clima) {
+        alvo.textContent = 'Escolha uma localidade de referência ou informe a latitude para o clima ser estimado a partir do local.';
+        return;
+    }
+    const f = clima.fatores;
+    let alto = 0, baixo = 0;
+    for (let m = 1; m < 12; m++) { if (f[m] > f[alto]) alto = m; if (f[m] < f[baixo]) baixo = m; }
+    alvo.textContent =
+        `Clima estimado no local: média de ${num(clima.tMedia, 1)} °C com variação de ±${num(clima.amplitude, 1)} °C. ` +
+        `O índice vai de ${num(f[baixo])} em ${MESES[baixo]} a ${num(f[alto])} em ${MESES[alto]}, amplitude de ${num(f[alto] / f[baixo])}x.`;
+}
+
+/* ---- Dados do cliente ---- */
+function dadosCliente() {
+    const o = {};
+    CAMPOS_CLIENTE.forEach(k => o[k] = String(document.getElementById('cli-' + k).value ?? '').trim());
+    return o;
+}
+
+function preencherCliente(dados) {
+    if (!dados) return;
+    CAMPOS_CLIENTE.forEach(k => { if (dados[k] != null) document.getElementById('cli-' + k).value = dados[k]; });
+    atualizarCliente();
+}
+
+function atualizarCliente() {
+    const c = dadosCliente();
+    const cab = document.getElementById('cabecalho-cliente');
+    const partes = [c.nome, c.uc ? 'UC ' + c.uc : '', c.cidade].filter(Boolean);
+    if (partes.length) { cab.textContent = partes.join(' · '); cab.classList.remove('hidden'); }
+    else cab.classList.add('hidden');
+
+    const ignorar = ['data','ramo','local','lat','lon','alt'];
+    const preenchidos = CAMPOS_CLIENTE
+        .filter(k => !ignorar.includes(k) && c[k] && c[k] !== 'Não informado').length;
+    sincronizarPerfil();
+    atualizarResumos();
+
+    document.getElementById('resumo-cliente').textContent =
+        c.nome ? c.nome
+        : preenchidos ? `${preenchidos} ${preenchidos === 1 ? 'campo preenchido' : 'campos preenchidos'}`
+        : 'Nenhum dado preenchido';
+}
+
+function nomeArquivo(base, ext) {
+    const s = slugArquivo(dadosCliente().nome);
+    return (s ? s + '-' : '') + base + '.' + (ext || 'csv');
+}
+
+function cabecalhoCSV(titulo) {
+    const c = dadosCliente();
+    const linhas = [String(titulo).replace(/;/g, ',')];
+    const par = (rotulo, valor) => {
+        if (valor && valor !== 'Não informado') linhas.push(rotulo + ';' + String(valor).replace(/;/g, ','));
+    };
+    par('Cliente', c.nome);
+    par('Unidade consumidora', c.uc);
+    par('Endereço', c.endereco);
+    par('Cidade e UF', c.cidade);
+    par('Concessionária', c.concessionaria);
+    par('Classe tarifária', c.classe);
+    par('Ramo de atividade', RAMOS[c.ramo] ? RAMOS[c.ramo].nome : c.ramo);
+    if (c.lat && c.lon) par('Coordenadas', `${c.lat}, ${c.lon}`);
+    if (c.alt) par('Altitude (m)', c.alt);
+    const clima = climaDoLocalAtual();
+    if (clima) par('Clima estimado', `média ${num(clima.tMedia, 1)} °C, variação +/- ${num(clima.amplitude, 1)} °C`);
+    par('Índice climático mensal', CONFIG.fatoresMensais.map(v => num(v)).join(' '));
+    par('Ocupação sábado / domingo', `${num(CONFIG.perfil.sab)} / ${num(CONFIG.perfil.dom)}`);
+    par('Responsável técnico', c.responsavel);
+    par('Data do estudo', dataBR(c.data));
+    par('Observações', c.obs);
+    linhas.push('Gerado em;' + new Date().toLocaleString('pt-BR'));
+    linhas.push('');
+    return linhas;
+}
+
+/* ---- Feriados ---- */
+function restaurarFeriados() {
+    document.getElementById('cfg-feriados-reg').value = FERIADOS_PADRAO;
+    atualizarInfoMoveis();
+    invalidarAnual();
+}
+
+function atualizarInfoMoveis() {
+    const ano = parseInt(document.getElementById('cfg-ano').value) || CONFIG.ano;
+    const lista = feriadosMoveis(ano).map(f => `${f.nome} ${f.data}`).join(' · ');
+    document.getElementById('info-moveis').textContent =
+        `Nacionais e regionais já preenchidos; edite à vontade. Os móveis de ${ano} entram sozinhos, calculados da Páscoa: ${lista}. As datas 06/03, 24/06 e 08/12 valem para Pernambuco e Recife.`;
+}
+
+/* ---- Destaque do preset em uso ---- */
+function presetAtual() {
+    const clima = climaDoLocalAtual();
+    if (clima && clima.fatores.every((v, i) => Math.abs(v - CONFIG.fatoresMensais[i]) < 0.006)) return 'local';
+    for (const nome in PRESETS) {
+        if (PRESETS[nome].every((v, i) => Math.abs(v - CONFIG.fatoresMensais[i]) < 0.005)) return nome;
+    }
+    return null;
+}
+
+function atualizarBotoesPreset() {
+    const atual = presetAtual();
+    document.querySelectorAll('[data-preset]').forEach(b => {
+        const ativo = b.dataset.preset === atual;
+        b.classList.toggle('preset-ativo', ativo);
+        b.setAttribute('aria-pressed', ativo ? 'true' : 'false');
+    });
+    const normalizado = Math.abs(somaArr(CONFIG.fatoresMensais) / 12 - 1) < 0.005;
+    const btn = document.getElementById('btn-normalizar');
+    btn.classList.toggle('preset-ativo', normalizado);
+    btn.setAttribute('aria-pressed', normalizado ? 'true' : 'false');
+}
+
+function montarGradeMeses() {
+    const grade = document.getElementById('grade-meses');
+    grade.innerHTML = '';
+    MESES_CURTO.forEach((m, i) => {
+        const div = document.createElement('div');
+        div.innerHTML = `<div class="text-[10px] text-slate-500 text-center mb-0.5">${m}</div>
+            <input type="number" class="inp inp-mes" step="0.05" min="0.1" max="3" value="${CONFIG.fatoresMensais[i].toFixed(2)}"
+                   onchange="editarFatorMes(${i},this)">`;
+        grade.appendChild(div);
+    });
+    atualizarBotoesPreset();
+}
+
+function editarFatorMes(i, el) {
+    let v = parseFloat(String(el.value).replace(',', '.'));
+    if (!isFinite(v)) v = 1;
+    v = Math.min(3, Math.max(0.1, v));
+    CONFIG.fatoresMensais[i] = v;
+    el.value = v.toFixed(2);
+    atualizarBotoesPreset();
+    invalidarAnual();
+    atualizarDiario();
+}
+
+function aplicarPreset(nome) {
+    let valores;
+    if (nome === 'local') {
+        const clima = climaDoLocalAtual();
+        if (!clima) {
+            alert('Escolha uma localidade de referência ou informe a latitude para calcular o clima do local.');
+            return;
+        }
+        valores = clima.fatores;
+    } else {
+        valores = PRESETS[nome];
+    }
+    CONFIG.fatoresMensais = valores.slice();
+    montarGradeMeses();
+    invalidarAnual();
+    atualizarDiario();
+}
+
+function normalizarFatores() {
+    const media = somaArr(CONFIG.fatoresMensais) / 12;
+    if (media > 0) CONFIG.fatoresMensais = CONFIG.fatoresMensais.map(v => v / media);
+    montarGradeMeses();
+    invalidarAnual();
+    atualizarDiario();
+}
+
+function aoMudarAno() {
+    lerConfigDaTela();
+    const nd = diasNoAno(CONFIG.ano);
+    document.getElementById('info-ano').textContent =
+        `${nd} dias · ${(nd * 24).toLocaleString('pt-BR')} horas${nd === 366 ? ' (ano bissexto)' : ''}`;
+    atualizarInfoMoveis();
+    invalidarAnual();
+}
+
+function mostrarAba(qual) {
+    const ehDiario = qual === 'diario';
+    document.getElementById('aba-diario').classList.toggle('hidden', !ehDiario);
+    document.getElementById('aba-anual').classList.toggle('hidden', ehDiario);
+    document.getElementById('aba-btn-diario').className =
+        (ehDiario ? 'aba-ativa' : 'aba-inativa') + ' px-5 py-2.5 rounded-xl text-sm font-semibold transition flex items-center gap-2';
+    document.getElementById('aba-btn-anual').className =
+        (!ehDiario ? 'aba-ativa' : 'aba-inativa') + ' px-5 py-2.5 rounded-xl text-sm font-semibold transition flex items-center gap-2';
+    if (!ehDiario && !resultadoAnual && !rodandoAnual) rodarAnual();
+}
+
+function alternarPainel(id) {
+    const el = document.getElementById(id);
+    const icone = document.getElementById('icone-' + id);
+    const fechado = el.classList.toggle('hidden');
+    icone.className = 'fa-solid text-slate-400 ' + (fechado ? 'fa-chevron-down' : 'fa-chevron-up');
+}
+
+/* ==========================================================================
+   10. EXPORTAÇÃO
+   ========================================================================== */
+
+/* ---- Calibração pela medição ---- */
+async function ajustarPotencias() {
+    const met = metricasComparacao();
+    if (!met) return;
+    const { somaMed, somaMod, fator } = met;
+    if (!(somaMod > 0)) return;
+
+    if (Math.abs(fator - 1) < 0.005) {
+        alert('O modelo já está a menos de 0,5% do total medido. Não há o que ajustar.');
+        return;
+    }
+    const ativos = equipamentosAtivos();
+    if (!ativos.length) { alert('Nenhum equipamento ativo para ajustar.'); return; }
+    if (!confirm(`Multiplicar a potência dos ${ativos.length} equipamentos ativos por ${num(fator, 3)}?\n\n` +
+                 `Modelo: ${num(somaMod, 0)} kWh\nMedido: ${num(somaMed, 0)} kWh`)) return;
+
+    ativos.forEach(eq => eq.potencia_kw = Math.round(eq.potencia_kw * fator * 10000) / 10000);
+    atualizarDiario();
+    await rodarAnual();
+}
+
+async function calibrarIndiceMensal() {
+    const met = metricasComparacao();
+    if (!met) return;
+    if (met.lidos.length < 3) {
+        alert('Informe pelo menos três ciclos para calibrar o formato da sazonalidade.');
+        return;
+    }
+    if (Math.abs(met.tendencia) >= 1.5 && !confirm(
+        `O consumo diário da conta ${met.tendencia > 0 ? 'sobe' : 'cai'} cerca de ${num(Math.abs(met.tendencia), 1)}% por ciclo ao longo do período.\n\n` +
+        'Calibrar a sazonalidade vai embutir esse crescimento no índice climático, que deixa de representar o clima do local. Continuar mesmo assim?')) return;
+
+    // A razão de cada ciclo é distribuída entre os meses que ele cobre, proporcional aos dias
+    const peso = new Array(12).fill(0), acumulado = new Array(12).fill(0);
+    met.lidos.forEach(l => {
+        if (!(l.mc > 0)) return;
+        const razao = l.medido / l.mc;
+        for (let m = 0; m < 12; m++) {
+            const d = l.diasPorMes[m];
+            if (d > 0) { peso[m] += d; acumulado[m] += razao * d; }
+        }
+    });
+
+    const correcao = new Array(12).fill(1);
+    let soma = 0, cobertos = 0;
+    for (let m = 0; m < 12; m++) {
+        if (peso[m] > 0) { correcao[m] = acumulado[m] / peso[m]; soma += correcao[m]; cobertos++; }
+    }
+    if (!cobertos) { alert('Os ciclos informados não cobrem nenhum mês do modelo.'); return; }
+    const media = soma / cobertos;
+    if (!(media > 0)) return;
+
+    const novos = CONFIG.fatoresMensais.map((v, m) =>
+        Math.min(3, Math.max(0.1, v * (peso[m] > 0 ? correcao[m] / media : 1))));
+    const m2 = somaArr(novos) / 12;
+    CONFIG.fatoresMensais = novos.map(v => Math.round(v / m2 * 1000) / 1000);
+
+    montarGradeMeses();
+    atualizarDiario();
+    await rodarAnual();
+}
+
+function exportarComparacao() {
+    const r = resultadoAnual;
+    const ciclos = r ? comparacaoCiclos() : null;
+    if (!ciclos) return;
+
+    const linhas = cabecalhoCSV(`Modelo contra a conta de energia — simulação de ${r.ano}`);
+    linhas.push('ciclo;leitura_anterior;leitura_atual;dias;medido_kWh;medido_kWh_dia;monte_carlo_kWh;mc_P05_kWh;mc_P95_kWh;deterministico_kWh;desvio_percentual');
+    const n2 = v => v.toFixed(1).replace('.', ',');
+    ciclos.forEach(l => {
+        const desvio = l.medido != null ? (l.mc / l.medido - 1) * 100 : null;
+        linhas.push([l.rotulo, dataCurta(l.anterior), dataCurta(l.atual), l.dias,
+                     l.medido != null ? n2(l.medido) : '',
+                     l.medido != null ? n2(l.medido / l.dias) : '',
+                     n2(l.mc), n2(l.p05), n2(l.p95), n2(l.det),
+                     desvio != null ? n2(desvio) : ''].join(';'));
+    });
+    baixarArquivo(nomeArquivo(`comparacao-modelo-medicao-${r.ano}`), linhas.join('\n'), 'text/csv;charset=utf-8;');
+}
+
+function exportarCSVHorario() {
+    const r = resultadoAnual;
+    if (!r) return;
+    const linhas = cabecalhoCSV(`Curva de carga horária de ${r.ano} — ${r.horasAno} horas`);
+    linhas.push('data;hora;dia_do_ano;mes;tipo_de_dia;demanda_media_horaria_kW;potencia_coincidente_kW');
+    for (let d = 0; d < r.nd; d++) {
+        const dt = new Date(r.ano, 0, 1 + d);
+        const data = `${String(dt.getDate()).padStart(2,'0')}/${String(dt.getMonth()+1).padStart(2,'0')}/${r.ano}`;
+        const tipo = NOMES_TIPO[r.tipos[d]];
+        for (let h = 0; h < 24; h++) {
+            linhas.push([data, String(h).padStart(2,'0') + ':00', d + 1, MESES[r.mesesDia[d]], tipo,
+                r.serieE[d*24+h].toFixed(4).replace('.', ','),
+                r.serieP[d*24+h].toFixed(4).replace('.', ',')].join(';'));
+        }
+    }
+    baixarArquivo(nomeArquivo(`curva-carga-${r.ano}-${r.horasAno}h`), linhas.join('\n'), 'text/csv;charset=utf-8;');
+}
+
+function exportarCSVDiario() {
+    const r = resultadoAnual;
+    if (!r) return;
+    const linhas = cabecalhoCSV(`Resumo diário de ${r.ano} — ${r.nd} dias`);
+    linhas.push('data;dia_do_ano;mes;tipo_de_dia;energia_kWh;energia_media_kWh;energia_P05_kWh;energia_P95_kWh;pico_kW');
+    for (let d = 0; d < r.nd; d++) {
+        const dt = new Date(r.ano, 0, 1 + d);
+        linhas.push([
+            `${String(dt.getDate()).padStart(2,'0')}/${String(dt.getMonth()+1).padStart(2,'0')}/${r.ano}`,
+            d + 1, MESES[r.mesesDia[d]], NOMES_TIPO[r.tipos[d]],
+            r.energiaDia[d].toFixed(3).replace('.', ','),
+            r.energiaMed[d].toFixed(3).replace('.', ','),
+            r.energiaP05[d].toFixed(3).replace('.', ','),
+            r.energiaP95[d].toFixed(3).replace('.', ','),
+            r.picoDia[d].toFixed(3).replace('.', ',')
+        ].join(';'));
+    }
+    baixarArquivo(nomeArquivo(`resumo-diario-${r.ano}`), linhas.join('\n'), 'text/csv;charset=utf-8;');
+}
+
+/* ==========================================================================
+   FIREBASE — biblioteca de estudos na nuvem
+   ========================================================================== */
+
+const firebaseConfig = {
+    apiKey: "AIzaSyALe5xiSkD6OcXHAUNzzV5dzcimUEazCvI",
+    authDomain: "curvadecarga-5a5f2.firebaseapp.com",
+    databaseURL: "https://curvadecarga-5a5f2-default-rtdb.firebaseio.com",
+    projectId: "curvadecarga-5a5f2",
+    storageBucket: "curvadecarga-5a5f2.firebasestorage.app",
+    messagingSenderId: "550675953954",
+    appId: "1:550675953954:web:87970c1e53cf656f6e8d7b"
+};
+
+let bancoNuvem = null;
+let estudoAtualId = null;
+
+// O banco em tempo real fica tentando reconectar para sempre quando a rede está
+// bloqueada, então toda chamada tem prazo para responder
+function comPrazo(promessa, ms) {
+    return Promise.race([
+        promessa,
+        new Promise((_, rejeitar) => setTimeout(() => {
+            const e = new Error('sem resposta do banco');
+            e.code = 'sem-resposta';
+            rejeitar(e);
+        }, ms || 9000))
+    ]);
+}
+
+function recadoErro(err) {
+    return (err && err.code === 'sem-resposta')
+        ? 'sem resposta do banco — este ambiente pode estar bloqueando a conexão'
+        : (err && (err.code || err.message)) || 'erro desconhecido';
+}
+
+function estadoNuvem(texto, classe) {
+    const el = document.getElementById('resumo-nuvem');
+    if (el) el.innerHTML = `<span class="${classe || 'text-slate-500'}">${texto}</span>`;
+}
+
+function travarNuvem(travado) {
+    ['btn-nuvem-salvar', 'btn-nuvem-listar'].forEach(id => {
+        const b = document.getElementById(id);
+        if (b) b.disabled = travado;
+    });
+}
+
+async function iniciarNuvem() {
+    if (typeof firebase === 'undefined' || !firebase.initializeApp) {
+        estadoNuvem('Biblioteca do Firebase não carregou', 'text-amber-400');
+        travarNuvem(true);
+        return;
+    }
+    try {
+        estadoNuvem('Conectando…');
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        bancoNuvem = firebase.database();
+
+        // Entrada anônima quando o projeto tiver esse método habilitado; segue sem ela caso contrário
+        try {
+            if (firebase.auth && !firebase.auth().currentUser) await comPrazo(firebase.auth().signInAnonymously(), 6000);
+        } catch (e) { /* as regras do banco é que decidem o acesso */ }
+
+        await listarNuvem(true);
+    } catch (err) {
+        bancoNuvem = null;
+        estadoNuvem('Nuvem indisponível neste ambiente', 'text-amber-400');
+        travarNuvem(true);
+    }
+}
+
+function renderListaNuvem(itens) {
+    const caixa = document.getElementById('lista-nuvem');
+    if (!itens.length) {
+        caixa.innerHTML = '<p class="text-xs text-slate-500 py-3 text-center">Nenhum estudo salvo ainda.</p>';
+        return;
+    }
+    caixa.innerHTML = `
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs text-slate-300 tbl min-w-[520px]">
+                <thead class="bg-slate-900 text-slate-400 font-semibold tracking-wide">
+                    <tr>
+                        <th class="p-2.5">Estudo</th>
+                        <th class="p-2.5">Cliente</th>
+                        <th class="p-2.5">Atualizado</th>
+                        <th class="p-2.5 w-20 text-center">Ações</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-700/50">` +
+        itens.map(it => {
+            const seguro = String(it.nome || it.id).replace(/"/g, '&quot;');
+            const quando = it.atualizado_ts ? new Date(it.atualizado_ts).toLocaleString('pt-BR') : '—';
+            const cliente = [it.cliente, it.uc ? 'UC ' + it.uc : ''].filter(Boolean).join(' · ') || '—';
+            return `<tr class="hover:bg-slate-700/30 transition ${it.id === estudoAtualId ? 'bg-sky-500/5' : ''}">
+                <td class="p-2.5 font-semibold text-white">${seguro}</td>
+                <td class="p-2.5 text-slate-400">${cliente}</td>
+                <td class="p-2.5 text-slate-400 whitespace-nowrap">${quando}</td>
+                <td class="p-2.5">
+                    <div class="flex items-center justify-center gap-0.5">
+                        <button onclick="abrirDaNuvem('${it.id}')" class="text-sky-400 hover:text-sky-300 p-1.5 rounded-lg transition" title="Abrir ${seguro}">
+                            <i class="fa-solid fa-file-arrow-down"></i>
+                        </button>
+                        <button onclick="excluirDaNuvem('${it.id}')" class="text-rose-400 hover:text-rose-300 p-1.5 rounded-lg transition" title="Excluir ${seguro}">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                    </div>
+                </td>
+            </tr>`;
+        }).join('') + '</tbody></table></div>';
+}
+
+async function listarNuvem(silencioso) {
+    if (!bancoNuvem) { if (!silencioso) alert('Sem conexão com a nuvem.'); return; }
+    const caixa = document.getElementById('lista-nuvem');
+    caixa.innerHTML = '<p class="text-xs text-slate-500 py-3 text-center"><i class="fa-solid fa-spinner fa-spin"></i> Carregando…</p>';
+    try {
+        const snap = await comPrazo(bancoNuvem.ref('estudos').once('value'));
+        const itens = [];
+        snap.forEach(filho => {
+            const v = filho.val() || {};
+            itens.push({ id: filho.key, nome: v.nome, cliente: v.cliente, uc: v.uc, atualizado_ts: v.atualizado_ts });
+        });
+        itens.sort((a, b) => (b.atualizado_ts || 0) - (a.atualizado_ts || 0));
+        renderListaNuvem(itens);
+        travarNuvem(false);
+        estadoNuvem(itens.length
+            ? `${itens.length} ${itens.length === 1 ? 'estudo salvo' : 'estudos salvos'}`
+            : 'Conectado · nenhum estudo salvo', 'text-slate-500');
+    } catch (err) {
+        caixa.innerHTML = `<p class="text-xs text-amber-400 py-3">Não foi possível ler os estudos: ${recadoErro(err)}. Se a conexão chegou ao banco, confira as regras de leitura do Realtime Database.</p>`;
+        estadoNuvem(err.code === 'sem-resposta' ? 'Nuvem indisponível neste ambiente' : 'Sem acesso ao banco', 'text-amber-400');
+        travarNuvem(false);
+    }
+}
+
+async function salvarNaNuvem() {
+    if (!bancoNuvem) return;
+    const c = dadosCliente();
+    const nome = (document.getElementById('nuvem-nome').value || '').trim() || c.nome || 'Estudo sem nome';
+    const id = slugArquivo(nome) || ('estudo-' + Date.now());
+
+    try {
+        const existe = (await comPrazo(bancoNuvem.ref('estudos/' + id + '/nome').once('value'))).exists();
+        if (existe && id !== estudoAtualId &&
+            !confirm(`Já existe um estudo salvo como "${nome}". Substituir?`)) return;
+
+        await comPrazo(bancoNuvem.ref('estudos/' + id).set({
+            nome,
+            cliente: c.nome || '',
+            uc: c.uc || '',
+            atualizado_em: new Date().toISOString(),
+            atualizado_ts: Date.now(),
+            pacote: montarPacote()
+        }));
+        estudoAtualId = id;
+        document.getElementById('nuvem-nome').value = nome;
+        await listarNuvem(true);
+    } catch (err) {
+        alert('Não foi possível salvar na nuvem: ' + recadoErro(err) + '.\n\nSe a conexão chegou ao banco, confira as regras de escrita do Realtime Database.');
+    }
+}
+
+async function abrirDaNuvem(id) {
+    if (!bancoNuvem) return;
+    try {
+        const reg = (await comPrazo(bancoNuvem.ref('estudos/' + id).once('value'))).val();
+        if (!reg || !reg.pacote) { alert('Esse estudo não tem dados para abrir.'); return; }
+        if (!confirm(`Abrir "${reg.nome || id}"? O que está na tela agora será substituído.`)) return;
+        aplicarPacote(reg.pacote);
+        estudoAtualId = id;
+        document.getElementById('nuvem-nome').value = reg.nome || '';
+        await listarNuvem(true);
+    } catch (err) {
+        alert('Não foi possível abrir o estudo: ' + recadoErro(err) + '.');
+    }
+}
+
+async function excluirDaNuvem(id) {
+    if (!bancoNuvem) return;
+    if (!confirm('Excluir esse estudo da nuvem? A ação não tem volta.')) return;
+    try {
+        await comPrazo(bancoNuvem.ref('estudos/' + id).remove());
+        if (estudoAtualId === id) estudoAtualId = null;
+        await listarNuvem(true);
+    } catch (err) {
+        alert('Não foi possível excluir: ' + recadoErro(err) + '.');
+    }
+}
+
+function aplicarPacote(p) {
+        if (!Array.isArray(p.equipamentos)) throw new Error('sem equipamentos');
+        equipamentos = p.equipamentos.map((e, i) => ({
+            id: e.id ?? Date.now() + i,
+            nome: e.nome ?? 'Equipamento',
+            potencia_kw: e.potencia_kw != null ? (+e.potencia_kw || 0.1)
+                         : e.potencia_w != null ? (+e.potencia_w || 100) / 1000 : 0.1,
+            qtd: +e.qtd || 1,
+            janelas: Array.isArray(e.janelas)
+                ? e.janelas.filter(j => j && isFinite(+j.inicio) && isFinite(+j.fim))
+                           .map(j => ({ inicio: +j.inicio, fim: +j.fim }))
+                : (e.det_inicio != null
+                    ? [{ inicio: +e.det_inicio || 0, fim: ((+e.det_inicio || 0) + (+e.det_duracao || 1)) % 24 }]
+                    : []),
+            mc_prob: +e.mc_prob || 1,
+            sens_saz: +e.sens_saz || 0,
+            fator_sab: e.fator_sab != null ? +e.fator_sab : 1,
+            fator_dom: e.fator_dom != null ? +e.fator_dom : 1,
+            continuo: !!e.continuo,
+            duty: +e.duty || 0.4,
+            ativo: e.ativo !== false
+        }));
+        const c = p.config || {};
+        if (Array.isArray(c.fatoresMensais) && c.fatoresMensais.length === 12) CONFIG.fatoresMensais = c.fatoresMensais.map(Number);
+        if (c.ano) document.getElementById('cfg-ano').value = c.ano;
+        if (c.nSim) document.getElementById('cfg-nsim').value = c.nSim;
+        if (c.nRep) document.getElementById('cfg-nrep').value = c.nRep;
+        if (c.deslocFDS != null) document.getElementById('cfg-desloc').value = c.deslocFDS;
+        if (c.feriados != null) document.getElementById('cfg-feriados').checked = !!c.feriados;
+        if (c.feriadosRegionais != null) document.getElementById('cfg-feriados-reg').value = c.feriadosRegionais;
+        if (c.tema === 'claro' || c.tema === 'escuro') aplicarTema(c.tema);
+        if (p.medicao && Array.isArray(p.medicao.periodos)) {
+            medicao.periodos = p.medicao.periodos
+                .filter(x => x && isFinite(+x.ano) && isFinite(+x.mes))
+                .map(x => ({
+                    chave: `${+x.ano}-${String(+x.mes + 1).padStart(2, '0')}`,
+                    ano: +x.ano, mes: +x.mes,
+                    rotulo: `${MESES_CURTO[+x.mes]}/${String(+x.ano).slice(-2)}`,
+                    anterior: x.anterior || null, atual: x.atual || null,
+                    energia: (x.energia != null && isFinite(+x.energia) && +x.energia > 0) ? +x.energia : null
+                }));
+            if (p.medicao.diaLeitura) document.getElementById('med-dia-leitura').value = p.medicao.diaLeitura;
+            const ps = medicao.periodos;
+            if (ps.length) {
+                document.getElementById('med-mes-ini').value = String(ps[0].mes);
+                document.getElementById('med-ano-ini').value = ps[0].ano;
+                document.getElementById('med-mes-fim').value = String(ps[ps.length - 1].mes);
+                document.getElementById('med-ano-fim').value = ps[ps.length - 1].ano;
+            }
+            renderTabelaMedicao();
+            atualizarResumoMedicao();
+        } else if (p.medicao && Array.isArray(p.medicao.valores) && p.medicao.valores.length === 12) {
+            // Formato antigo: doze meses cheios de um único ano
+            const anoAntigo = p.medicao.ano != null ? +p.medicao.ano : CONFIG.ano - 1;
+            document.getElementById('med-mes-ini').value = '0';
+            document.getElementById('med-ano-ini').value = anoAntigo;
+            document.getElementById('med-mes-fim').value = '11';
+            document.getElementById('med-ano-fim').value = anoAntigo;
+            document.getElementById('med-dia-leitura').value = '';
+            gerarPeriodos(true);
+            p.medicao.valores.forEach((v, i) => {
+                if (medicao.periodos[i] && v != null && isFinite(+v) && +v > 0) medicao.periodos[i].energia = +v;
+            });
+            renderTabelaMedicao();
+            atualizarResumoMedicao();
+        }
+        if (p.cliente && p.cliente.ramo) ramoEscolhido = true;
+        preencherCliente(p.cliente);
+        atualizarInfoMoveis();
+        montarGradeMeses();
+        aoMudarAno();
+        resultadoAnual = null;
+        document.getElementById('texto-status-anual').textContent = 'Configuração carregada. Simule o ano para ver os resultados.';
+        document.getElementById('btn-csv-h').disabled = true;
+        document.getElementById('btn-csv-d').disabled = true;
+        atualizarDiario();
+}
+
+function montarPacote() {
+    lerConfigDaTela();
+    return {
+        versao: 3,
+        gerado_em: new Date().toISOString(),
+        cliente: dadosCliente(),
+        medicao: {
+            diaLeitura: document.getElementById('med-dia-leitura').value || null,
+            periodos: medicao.periodos.map(x => ({ ano: x.ano, mes: x.mes, anterior: x.anterior, atual: x.atual, energia: x.energia }))
+        },
+        config: {
+            ano: CONFIG.ano, nSim: CONFIG.nSim, nRep: CONFIG.nRep,
+            deslocFDS: CONFIG.deslocFDS, fatoresMensais: CONFIG.fatoresMensais,
+            feriados: document.getElementById('cfg-feriados').checked,
+            feriadosRegionais: document.getElementById('cfg-feriados-reg').value,
+            tema: document.documentElement.dataset.tema
+        },
+        equipamentos
+    };
+}
+
+function exportarConfig() {
+    baixarArquivo(nomeArquivo('curva-de-carga-config', 'json'), JSON.stringify(montarPacote(), null, 2), 'application/json');
+}
+
+function importarConfig(evento) {
+    const arq = evento.target.files[0];
+    if (!arq) return;
+    const leitor = new FileReader();
+    leitor.onload = () => {
+        try {
+            aplicarPacote(JSON.parse(leitor.result));
+        } catch (err) {
+            alert('Não foi possível ler esse arquivo. Use um JSON gerado pelo botão "Salvar configuração".');
+        }
+        evento.target.value = '';
+    };
+    leitor.readAsText(arq);
+}
+
+/* ==========================================================================
+   11. INICIALIZAÇÃO
+   ========================================================================== */
+
+function iniciar() {
+    aplicarTema(document.documentElement.dataset.tema === 'claro' ? 'claro' : 'escuro');
+
+    document.addEventListener('keydown', ev => {
+        if (ev.key === 'Escape' && !document.getElementById('modal-editar').classList.contains('hidden')) fecharEditor();
+    });
+
+    const selMes = document.getElementById('sel-mes');
+    MESES.forEach((m, i) => selMes.add(new Option(m, i)));
+    selMes.value = 0;
+
+    const selJanela = document.getElementById('sel-janela');
+    selJanela.add(new Option('Ano inteiro', 'ano'));
+    MESES.forEach((m, i) => selJanela.add(new Option(m, i)));
+    selJanela.value = 'ano';
+
+    const selRamo = document.getElementById('cli-ramo');
+    Object.keys(RAMOS).forEach(k => selRamo.add(new Option(RAMOS[k].nome, k)));
+    selRamo.value = 'residencial';
+
+    const selLocal = document.getElementById('cli-local');
+    selLocal.add(new Option('Personalizado', ''));
+    CIDADES.forEach((c, i) => selLocal.add(new Option(c[0], String(i))));
+    selLocal.value = '';
+
+    const anoMedicao = (parseInt(document.getElementById('cfg-ano').value, 10) || CONFIG.ano) - 1;
+    ['med-mes-ini', 'med-mes-fim'].forEach(id => {
+        const sel = document.getElementById(id);
+        MESES.forEach((m, i) => sel.add(new Option(m, String(i))));
+    });
+    document.getElementById('med-mes-ini').value = '0';
+    document.getElementById('med-mes-fim').value = '11';
+    document.getElementById('med-ano-ini').value = anoMedicao;
+    document.getElementById('med-ano-fim').value = anoMedicao;
+    gerarPeriodos(true);
+
+    document.getElementById('cfg-feriados-reg').value = FERIADOS_PADRAO;
+    const hoje = new Date();
+    document.getElementById('cli-data').value =
+        `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`;
+    atualizarCliente();
+
+    renderJanelas('novo');
+    montarGradeMeses();
+    aoMudarAno();
+    atualizarDiario();
+
+    iniciarNuvem();
+
+    let redimensionando;
+    window.addEventListener('resize', () => {
+        clearTimeout(redimensionando);
+        redimensionando = setTimeout(() => { if (resultadoAnual) desenharHeatmap(); }, 250);
+    });
+}
+
+window.addEventListener('DOMContentLoaded', iniciar);
+</script>
+</body>
+</html>
